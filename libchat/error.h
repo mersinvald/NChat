@@ -11,9 +11,10 @@ enum {
     ERR_ACCEPT,
     ERR_CREATEIPCSOCK,
     ERR_CREATEBAY,
-    ERR_FNCTL,
+    ERR_FCNTL,
     ERR_FORK,
-    ERR_SENDDATA,
+    ERR_SEND,
+    ERR_RECV,
     ERR_RESOLVE
 };
 
