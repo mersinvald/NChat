@@ -10,13 +10,17 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
+
 #include <libexplain/socket.h>
 #include <libexplain/gethostbyname.h>
+#include <libexplain/fcntl.h>
 #include <libexplain/fopen.h>
 
 #include <log.h>
 #include <types.h>
 #include <error.h>
+#include <non_block_io.h>
 
 #define BUFFSIZE 512
 
@@ -77,6 +81,13 @@ int check_conf(config* conf){
     return (conf->serv_hostname != NULL || conf->serv_ip != NULL) && (conf->serv_port > 0);
 }
 
+int init_msg(message *msg, config *conf){
+    //@TODO memset error handling
+    memset(msg, '\0', sizeof(message));
+    strcpy(msg->username, conf->username);
+    return 0;
+}
+
 int main(int argc, char** argv){
     int exit_code = ERR_NO;
     int n, i;
@@ -135,31 +146,60 @@ int main(int argc, char** argv){
     }
 
     /* Setting up client */
-    int clitfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(clitfd < 0){
+    int clifd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(clifd < 0){
         lc_error("ERROR - socket(): can't create client TCP socket\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
         exit_code = ERR_CREATESOCK;
-        goto close_files;
+        goto close_logfile;
     }
 
     /* Setting up server struct */
     struct sockaddr_in saddr;
-    int saddrlen;
+    uint saddrlen;
+    memset(&saddr, 0, sizeof(saddr));
 
-    if(inet_aton(conf.serv_ip, &saddr.sin_addr) <= 0){
-        lc_error("ERROR - inet_aton(): can't get saddr_in from IP %s", conf.serv_ip);
-        exit_code = ERR_RESOLVE;
-        goto close_client;
-    }
+    saddr.sin_addr.s_addr = inet_addr(conf.serv_ip);
     saddr.sin_family = AF_INET;
-    saddr.sin_port   = conf.serv_port;
+    saddr.sin_port   = htons(conf.serv_port);
     saddrlen = sizeof(saddr);
 
     /* Connecting to server */
-    if(connect(clitfd, (struct sockadd*)&saddr, saddrlen) < 0){
-        lc_error("ERROR - connect(): couldn't connect to server %s:%u\n%s", conf.serv_ip, conf.serv_port, explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+    if(connect(clifd, (struct sockaddr*)&saddr, saddrlen) < 0){
+        lc_error("ERROR - connect(): couldn't connect to server %s:%u(%u)\n%s", conf.serv_ip, conf.serv_port, ntohl(saddr.sin_addr.s_addr), explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
         exit_code = ERR_CONNECT;
         goto close_client;
+    }
+
+    /* Switching socket to non-blocking I/O mode */
+    int flags = fcntl(clifd, F_GETFL, 0);
+    if(fcntl(clifd, F_SETFL, flags | O_NONBLOCK) < 0){
+        lc_error("ERROR - fcntl(): error\n%s", explain_fcntl(clifd, F_SETFL, flags | O_NONBLOCK));
+        exit_code = ERR_FCNTL;
+        goto close_client;
+    }
+
+    message msg;
+    char buffer[sizeof(msg.text)];
+    while(1){
+        init_msg(&msg, &conf);
+
+        n = lc_recv_non_block(clifd, &msg, sizeof(message), 0);
+        if(n < 0){
+            exit_code = ERR_RECV;
+            goto close_client;
+        }
+        if(n > 0){
+            printf("%s: %s", msg.username, msg.text);
+        }
+
+        if(fgets(buffer, sizeof(buffer), stdin) != NULL){
+            strcpy(msg.text, buffer);
+            n = lc_send_non_block(clifd, &msg, sizeof(msg), 0);
+            if(n < 0){
+                exit_code = ERR_SEND;
+                goto close_client;
+            }
+        }
     }
 
 
@@ -168,9 +208,9 @@ close_client:
     shutdown(clifd, SHUT_RDWR);
     close(clifd);
 close_logfile:
-    if(LC_LOG_TO_FILE) fclose(logfile);
 exit:
     lc_log_v(1, "Exititng with code %i", exit_code);
+    if(LC_LOG_TO_FILE) fclose(logfile);
     return exit_code;
 }
 

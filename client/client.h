@@ -1,6 +1,7 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 #include <stdlib.h>
+#include <types.h>
 
 #define DEFAULT_PORT     30200
 #define DEFAULT_VERB     1
@@ -23,6 +24,8 @@ struct config_s {
 };
 
 typedef struct config_s config;
+
+extern int init_msg(message* msg, config* conf);
 
 #endif // CLIENT_H
 
