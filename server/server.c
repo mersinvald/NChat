@@ -9,6 +9,7 @@
 #include <signal.h>
 
 #include <libexplain/socket.h>
+#include <libexplain/fcntl.h>
 #include <arpa/inet.h>
 
 #include <log.h>
@@ -23,6 +24,21 @@
 #define DEFAULT_LOG  NULL
 #define DEFAULT_NAME "Chat"
 #define IPC_SOCKET_BINDPOINT "/tmp/chat_ipc-%i.sock"
+
+volatile int done = 0;
+
+int term(int signum){
+    char sig[16];
+    switch(signum){
+    case SIGINT:  strcpy(sig, "SIGINT");  break;
+    case SIGTERM: strcpy(sig, "SIGTERM"); break;
+    case SIGKILL: strcpy(sig, "SIGKILL"); break;
+    default:  return -1;
+    }
+    lc_log_v(1, "Got %s, shutting down.", sig);
+    done = 1;
+    return 0;
+}
 
 void usage(char* arg0){
     printf("Usage: %s [options]\n\n"
@@ -57,6 +73,14 @@ int parse_args(config* conf, int argc, char** argv){
 int main(int argc, char** argv){
     int exit_code = ERR_NO;
     int n;
+
+    /* Making server react on SIGTERM and SIGKILL */
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = term;
+    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGKILL, &action, NULL);
+    sigaction(SIGINT, &action, NULL);
 
     /* Setting up default config */
     config conf = {
@@ -156,8 +180,8 @@ int main(int argc, char** argv){
     int flags;
     flags = fcntl(socktrans.fd, F_GETFL, 0);
     if(fcntl(socktrans.fd, F_SETFL, flags | O_NONBLOCK) < 0){
-        lc_error("ERROR - fnctl(): can't switch socket to non-blocking I/O mode");
-        exit_code = ERR_FNCTL;
+        lc_error("ERROR - fnctl(): can't switch socket to non-blocking I/O mode\n");
+        exit_code = ERR_FCNTL;
         goto close_ipc_socket;
     }
 
@@ -179,7 +203,7 @@ int main(int argc, char** argv){
     lc_log_v(1, "Listening on port %u", conf.port);
 
     /* Main listener loop */
-    while(1){
+    while(!done){
         struct sockaddr_in newcliaddr;
         uint nclilen; //= sizeof(newcliaddr);
         int newsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
@@ -195,7 +219,7 @@ int main(int argc, char** argv){
         flags = fcntl(newsockfd, F_GETFL, 0);
         if(fcntl(newsockfd, F_SETFL, flags | O_NONBLOCK) < 0){
             lc_error("ERROR - fnctl() error");
-            exit_code = ERR_FNCTL;
+            exit_code = ERR_FCNTL;
             goto close_ipc_socket;
         }
 
@@ -204,7 +228,7 @@ int main(int argc, char** argv){
         n = ancil_send_fd(socktrans.fd, newsockfd);
         if(n < 0){
             lc_error("ERROR in main() - can't send ancillary fd");
-            exit_code = ERR_SENDDATA;
+            exit_code = ERR_SEND;
             goto close_ipc_socket;
         }
 
