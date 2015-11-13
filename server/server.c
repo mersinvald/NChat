@@ -15,6 +15,7 @@
 #include <log.h>
 #include <error.h>
 #include <non_block_io.h>
+#include <sig_handler.h>
 
 #include "message_bay.h"
 #include "server.h"
@@ -24,21 +25,6 @@
 #define DEFAULT_LOG  NULL
 #define DEFAULT_NAME "Chat"
 #define IPC_SOCKET_BINDPOINT "/tmp/chat_ipc-%i.sock"
-
-volatile int done = 0;
-
-int term(int signum){
-    char sig[16];
-    switch(signum){
-    case SIGINT:  strcpy(sig, "SIGINT");  break;
-    case SIGTERM: strcpy(sig, "SIGTERM"); break;
-    case SIGKILL: strcpy(sig, "SIGKILL"); break;
-    default:  return -1;
-    }
-    lc_log_v(1, "Got %s, shutting down.", sig);
-    done = 1;
-    return 0;
-}
 
 void usage(char* arg0){
     printf("Usage: %s [options]\n\n"
@@ -77,7 +63,7 @@ int main(int argc, char** argv){
     /* Making server react on SIGTERM and SIGKILL */
     struct sigaction action;
     memset(&action, 0, sizeof(struct sigaction));
-    action.sa_handler = term;
+    action.sa_handler = lc_term;
     sigaction(SIGTERM, &action, NULL);
     sigaction(SIGKILL, &action, NULL);
     sigaction(SIGINT, &action, NULL);
@@ -203,7 +189,7 @@ int main(int argc, char** argv){
     lc_log_v(1, "Listening on port %u", conf.port);
 
     /* Main listener loop */
-    while(!done){
+    while(!lc_done){
         struct sockaddr_in newcliaddr;
         uint nclilen; //= sizeof(newcliaddr);
         int newsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);

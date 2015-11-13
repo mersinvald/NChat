@@ -6,6 +6,7 @@
 #include <types.h>
 #include <log.h>
 #include <non_block_io.h>
+#include <sig_handler.h>
 #include <ancillary.h>
 
 #include <libexplain/socket.h>
@@ -58,6 +59,15 @@ int fork_bay(Socket_un socktrans){
         return pid;
 
     /* Now we are in child process */
+
+    /* React on SIGTERM and SIGKILL */
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = lc_term;
+    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGKILL, &action, NULL);
+    sigaction(SIGINT, &action, NULL);
+
     struct bay_s bay;
     bay.clientsfd = NULL;
     bay.count = 0;
@@ -68,7 +78,7 @@ int fork_bay(Socket_un socktrans){
 
     signal(SIGPIPE, SIGINT);
 
-    while(1){
+    while(!lc_done){
         memset(&chatmsg, 0, sizeof(chatmsg));
         n = ancil_recv_fd(socktrans.fd, &newclientfd);
         if(n < 0){ // seems like bug: getting -1 on succsess
@@ -99,6 +109,7 @@ int fork_bay(Socket_un socktrans){
     }
 
 exit:
+    lc_log_v(3, "Freeing bay");
     free(bay.clientsfd);
     close(socktrans.fd);
     exit(0);
