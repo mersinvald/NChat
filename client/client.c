@@ -84,10 +84,10 @@ int check_conf(config* conf){
     return (conf->serv_hostname != NULL || conf->serv_ip != NULL) && (conf->serv_port > 0);
 }
 
-int init_msg(message *msg, config *conf){
+int init_msg(message *msg){
     //@TODO memset error handling
     memset(msg, '\0', sizeof(message));
-    strcpy(msg->username, conf->username);
+    strcpy(msg->username, conf.username);
     return 0;
 }
 
@@ -96,15 +96,14 @@ int main(int argc, char** argv){
     int n, i;
 
     /* Setting up default config */
-    config conf = {
-        DEFAULT_PORT,
-        DEFAULT_VERB,
-        DEFAULT_SHOST,
-        DEFAULT_SIP,
-        DEFAULT_SPORT,
-        DEFAULT_LOGFILE,
-        DEFAULT_USERNAME
-    };
+    conf.port          = DEFAULT_PORT;
+    conf.verb          = DEFAULT_VERB;
+    conf.serv_hostname = DEFAULT_SHOST;
+    conf.serv_ip       = DEFAULT_SIP;
+    conf.serv_port     = DEFAULT_SPORT;
+    conf.logfile       = DEFAULT_LOGFILE;
+    conf.username      = DEFAULT_USERNAME;
+
 
     if(parse_args(&conf, argc, argv) < 0 || !check_conf(&conf)){
         usage(argv[0]);
@@ -124,14 +123,19 @@ int main(int argc, char** argv){
             lc_log_to_file(logfile);
     }
 
-    /* Involving interface in separate thread */
-    msgqueue *inqueue = calloc(sizeof(msgqueue), 0)
-            ,*outqueue = calloc(sizeof(msgqueue), 0);
-    pthread_mutex_init(&inqueue->mtx, NULL);
-    pthread_mutex_init(&outqueue->mtx, NULL);
-    interface_tdata interface_args = {inqueue, outqueue };
+    /* Preparing data for interface thread */
+    pthread_mutex_t inmtx  = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t outmtx = PTHREAD_MUTEX_INITIALIZER;
+    queue inqueue  = QUEUE_INITIALIZER(sizeof(message), &inmtx);
+    queue outqueue = QUEUE_INITIALIZER(sizeof(message), &outmtx);
+
+    interface_tdata* interface_args = malloc(sizeof(interface_tdata));
+    interface_args->inqueue  = &inqueue;
+    interface_args->outqueue = &outqueue;
+
+    /* Invoking interface thread */
     pthread_t interface_thread;
-    if(pthread_create(&interface_thread, NULL, interface, &interface_args) < 0){
+    if(pthread_create(&interface_thread, NULL, interface, interface_args) < 0){
         // error handling
     }
 
@@ -190,9 +194,7 @@ int main(int argc, char** argv){
     }
 
     message msg;
-    char buffer[sizeof(msg.text)];
     while(1){
-        init_msg(&msg, &conf);
 
         n = lc_recv_non_block(clifd, &msg, sizeof(message), 0);
         if(n < 0){
@@ -200,24 +202,24 @@ int main(int argc, char** argv){
             goto close_client;
         }
         if(n > 0){
-            pthread_mutex_lock(&inqueue->mtx);
-            lc_msgque_queue(inqueue, &msg);
-            pthread_mutex_unlock(&inqueue->mtx);
+            pthread_mutex_lock(inqueue.mtx);
+            add(&inqueue, &msg);
+            pthread_mutex_unlock(inqueue.mtx);
             memset(&msg, '\0', sizeof(message));
         }
 
-        pthread_mutex_lock(&outqueue->mtx);
-        if(outqueue->lenght > 0){
-            message* out = lc_msgque_pop(&outqueue);
+        pthread_mutex_lock(outqueue.mtx);
+        if(outqueue.lenght > 0){
+            message* out = (message*) pop(&outqueue);
             n = lc_send_non_block(clifd, out, sizeof(message), 0);
             if(n < 0){
                 exit_code = ERR_SEND;
                 goto close_client;
             }
             free(out);
-            pthread_mutex_unlock(&outqueue->mtx);
+            pthread_mutex_unlock(outqueue.mtx);
         }
-        pthread_mutex_unlock(&outqueue->mtx);
+        pthread_mutex_unlock(outqueue.mtx);
 
         usleep(10000);
     }

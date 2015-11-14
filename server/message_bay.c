@@ -15,8 +15,11 @@
 #include <memory.h>
 #include <unistd.h>
 
+volatile int lastcliindex = 0;
+struct bay_s* bay;
+
 int add_client(struct bay_s *bay, int fd){
-    int* temp = realloc(bay->clientsfd, ++(bay->count) * sizeof(int));
+    int* temp = realloc(bay->clientsfd, (++bay->count) * sizeof(int));
     if(temp == NULL) return -1;
 
     bay->clientsfd = temp;
@@ -27,14 +30,13 @@ int add_client(struct bay_s *bay, int fd){
 int del_client(struct bay_s *bay, int index){
     shutdown(bay->clientsfd[index], SHUT_RDWR);
     close(bay->clientsfd[index]);
-    int* s = bay->clientsfd+(index * sizeof(int));
     if(bay->count > 1) {
-        int* temp = memmove(s, s+sizeof(int), (bay->count-index) * sizeof(int));
-        if(temp == NULL) return -1;
+        bay->clientsfd[index] = bay->clientsfd[bay->count-1];
+        bay->clientsfd = realloc(bay->clientsfd, (bay->count-1) * sizeof(int));
         bay->count--;
     } else {
         free(bay->clientsfd);
-         bay->count = 0;
+        bay->count = 0;
     }
     return 0;
 }
@@ -42,58 +44,72 @@ int del_client(struct bay_s *bay, int index){
 void broadcast(struct bay_s *bay, message* msg, int size){
     int i, fd, n;
     for(i = 0; i < bay->count; i++){
+        lastcliindex = i;
         fd = bay->clientsfd[i];
         n = lc_send_non_block(fd, msg, size, 0);
         if(n < 0){
             lc_error("ERROR - lc_send_non_block(): got -1, deleting this client");
-            del_client(bay, i);
         }
      }
 }
 
+void sigpipe_handler(int signum){
+    if(signum == SIGPIPE){
+        del_client(bay, lastcliindex);
+        lc_error("Client's #%i connection died, deleting.", lastcliindex);
+    }
+}
+
 void* bay_thread(void* arg){
     /* Making server react on SIGTERM and SIGKILL */
-    struct sigaction action;
-    memset(&action, 0, sizeof(struct sigaction));
-    action.sa_handler = lc_term;
-    sigaction(SIGTERM, &action, NULL);
-    sigaction(SIGKILL, &action, NULL);
-    sigaction(SIGINT, &action, NULL);
+    struct sigaction termaction;
+    memset(&termaction, 0, sizeof(struct sigaction));
+    termaction.sa_handler = lc_term;
+    sigaction(SIGTERM, &termaction, NULL);
+    sigaction(SIGKILL, &termaction, NULL);
+    sigaction(SIGINT, &termaction, NULL);
 
-    bay_arg* args = (bay_arg*) arg;
-    int* newclientfd = args->newclientfd;
-    pthread_mutex_t* mtx = args->mtx;
+    /* Sigpipe handler to disable broken connections */
+    struct sigaction pipeaction;
+    memset(&pipeaction, 0, sizeof(struct sigaction));
+    pipeaction.sa_handler = sigpipe_handler;
+    sigaction(SIGPIPE, &pipeaction, NULL);
 
-    struct bay_s bay;
-    bay.clientsfd = NULL;
-    bay.count = 0;
+    queue* fdque = (queue*) arg;
+    pthread_mutex_t* mtx = fdque->mtx;
 
-    int n, i;
+    bay = malloc(sizeof(bay));
+    bay->clientsfd = NULL;
+    bay->count = 0;
+    struct bay_s* bayptr = bay;
+
+    int n, i, fd, *ptr;
     message chatmsg;
-
-    signal(SIGPIPE, SIGINT);
+    memset(&chatmsg, '\0', sizeof(message));
 
     while(!lc_done){
         pthread_mutex_lock(mtx);
-        if(*newclientfd != -1){
-            if(add_client(&bay, *newclientfd) < 0){
+        while(fdque->lenght > 0){
+            ptr = (int*) pop(fdque);
+            if(add_client(bay, *ptr) < 0){
                 lc_error("ERROR - add_client(): can't add new client, realloc() failure\nProbably low memory or corruption");
                 goto exit;
             }
-            *newclientfd = -1;
+            free(ptr);
         }
         pthread_mutex_unlock(mtx);
 
-        for(i = 0; i < bay.count; i++){
-            int fd = bay.clientsfd[i];
+        for(i = 0; i < bay->count; i++){
+            memset(&chatmsg, '\0', sizeof(message));
+            lastcliindex = i;
+            fd = bay->clientsfd[i];
             n = lc_recv_non_block(fd, &chatmsg, sizeof(chatmsg), 0);
             if(n < 0){
-                lc_error("ERROR - lc_recv_non_block(): returned -1, deleting this client");
-                del_client(&bay, i);
+                lc_error("ERROR - lc_recv_non_block(): returned -1");
             }
             if(n > 0){
                 lc_log_v(4, "Received message from one of clients --> broadcasting...");
-                broadcast(&bay, &chatmsg, sizeof(chatmsg));
+                broadcast(bay, &chatmsg, sizeof(chatmsg));
             }
         }
 
@@ -102,6 +118,7 @@ void* bay_thread(void* arg){
 
 exit:
     lc_log_v(3, "Freeing bay");
-    free(bay.clientsfd);
+    free(bay->clientsfd);
+    free(bay);
     exit(0);
 }

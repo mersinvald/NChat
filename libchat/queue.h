@@ -3,6 +3,8 @@
 
 #include <pthread.h>
 
+#define QUEUE_INITIALIZER(ssize, mtx) {NULL, 0, ssize, mtx}
+
 /* list node */
 struct qnode_s {
     void* var;

@@ -19,7 +19,7 @@ SOURCES += libchat.c \
     fd_recv.c \
     fd_send.c \
     sig_handler.c \
-    msgqueue.c
+    queue.c
 
 HEADERS += \
     types.h \
@@ -29,7 +29,7 @@ HEADERS += \
     non_block_io.h \
     ancillary.h \
     sig_handler.h \
-    msgqueue.h
+    queue.h
 
 unix {
     target.path = /usr/lib

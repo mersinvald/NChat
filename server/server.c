@@ -17,6 +17,7 @@
 #include <non_block_io.h>
 #include <sig_handler.h>
 
+#include "queue.h"
 #include "message_bay.h"
 #include "server.h"
 
@@ -123,12 +124,14 @@ int main(int argc, char** argv){
     lc_log_v(2, "Binded listener socket to port %i", conf.port);
 
     /* Creating message bay */
-    int newclientfd = -1;
     pthread_t bay_thr;
     pthread_mutex_t bay_mtx = PTHREAD_MUTEX_INITIALIZER;
-    bay_arg b_arg = {&newclientfd, &bay_mtx};
+    queue* bay_q = malloc(sizeof(queue));
+    bay_q->ssize = sizeof(int);
+    bay_q->lenght = 0;
+    bay_q->mtx = &bay_mtx;
 
-    if((pthread_create(&bay_thr, NULL, bay_thread, &b_arg)) < 0){
+    if((pthread_create(&bay_thr, NULL, bay_thread, bay_q)) < 0){
         lc_error("ERROR - fork(): can't fork message bay subprocess\nProbably low memory or corruption");
         exit_code = ERR_CREATEBAY;
         goto kill_bay;
@@ -146,11 +149,11 @@ int main(int argc, char** argv){
     /* Main listener loop */
     struct sockaddr_in newcliaddr;
     uint nclilen = sizeof(newcliaddr);
-    int tempsockfd;
+    int newclientfd;
     int flags;
     while(!lc_done){
-        tempsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
-        if(tempsockfd < 0){
+        newclientfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
+        if(newclientfd < 0){
             lc_error("ERROR - accept(): can't accept incoming connection\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
             exit_code = ERR_ACCEPT;
             goto kill_bay;
@@ -159,15 +162,15 @@ int main(int argc, char** argv){
         lc_log_v(4, "Created new socket for client %s:%u", inet_ntoa(newcliaddr.sin_addr), ntohs(newcliaddr.sin_port));
 
         lc_log_v(4, "Switching client socket to non-blocking I/O mode");
-        flags = fcntl(tempsockfd, F_GETFL, 0);
-        if(fcntl(tempsockfd, F_SETFL, flags | O_NONBLOCK) < 0){
+        flags = fcntl(newclientfd, F_GETFL, 0);
+        if(fcntl(newclientfd, F_SETFL, flags | O_NONBLOCK) < 0){
             lc_error("ERROR - fnctl() error");
             exit_code = ERR_FCNTL;
             goto kill_bay;
         }
 
         pthread_mutex_lock(&bay_mtx);
-        newclientfd = tempsockfd;
+        add(bay_q, &newclientfd);
         pthread_mutex_unlock(&bay_mtx);
 
         usleep(100000);

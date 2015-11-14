@@ -25,7 +25,9 @@ struct config_s {
 
 typedef struct config_s config;
 
-extern int init_msg(message* msg, config* conf);
+config conf;
+
+extern int init_msg(message* msg);
 
 #endif // CLIENT_H
 
