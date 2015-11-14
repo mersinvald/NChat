@@ -189,10 +189,11 @@ int main(int argc, char** argv){
     lc_log_v(1, "Listening on port %u", conf.port);
 
     /* Main listener loop */
+    struct sockaddr_in newcliaddr;
+    uint nclilen = sizeof(newcliaddr);
+    int newsockfd;
     while(!lc_done){
-        struct sockaddr_in newcliaddr;
-        uint nclilen; //= sizeof(newcliaddr);
-        int newsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
+        newsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
         if(newsockfd < 0){
             lc_error("ERROR - accept(): can't accept incoming connection\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
             exit_code = ERR_ACCEPT;
