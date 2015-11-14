@@ -14,7 +14,7 @@ HEADERS += \
     server.h \
     message_bay.h
 
-LIBS += -lexplain
+LIBS += -lexplain -lpthread
 
 
 

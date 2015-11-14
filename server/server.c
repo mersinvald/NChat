@@ -58,7 +58,6 @@ int parse_args(config* conf, int argc, char** argv){
 
 int main(int argc, char** argv){
     int exit_code = ERR_NO;
-    int n;
 
     /* Making server react on SIGTERM and SIGKILL */
     struct sigaction action;
@@ -123,62 +122,18 @@ int main(int argc, char** argv){
     }
     lc_log_v(2, "Binded listener socket to port %i", conf.port);
 
-    /* Creating sockets for IPC */
-    Socket_un socktrans;
-    socktrans.fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-    if(socktrans.fd < 0){
-        lc_error("ERROR - socket(): can't create IPC socket\n%s", explain_socket(AF_UNIX, SOCK_DGRAM, 0));
-        exit_code = ERR_CREATEIPCSOCK;
-        goto close_listener;
-    }
-    lc_log_v(3, "Created IPC socket");
-
-    socktrans.saddr.sun_family = AF_UNIX;
-    socktrans.slen = sizeof(socktrans.saddr);
-
-    /* Binding IPC socket */
-    char buffer[128];
-    int ipc_n = 0;
-    lc_log_v(4, "Binding IPC socket");
-    do {
-        memset(&buffer, '\0', sizeof(buffer));
-        sprintf(socktrans.saddr.sun_path, IPC_SOCKET_BINDPOINT, ipc_n++);
-        n = bind(socktrans.fd, (struct sockaddr*)&socktrans.saddr, socktrans.slen);;
-        if(n < 0) lc_log_v(4, "Bindpoint %s already reserved :(", socktrans.saddr.sun_path);
-    } while(n < 0 && ipc_n < 100);
-    if(n < 0){
-        lc_error("ERROR - bind(): can't IPC socket\n%s", explain_socket(AF_UNIX, SOCK_DGRAM, 0));
-        exit_code = ERR_BINDSOCK;
-        goto close_ipc_socket;
-    }
-    lc_log_v(2, "Binded IPC socket to %s", socktrans.saddr.sun_path);
-
-    /* Connecting process to IPC socket */
-    if((connect(socktrans.fd, (struct sockaddr*)&socktrans.saddr, socktrans.slen)) < 0){
-        lc_error("ERROR - connect(): can't connect to IPC socket\n%s", explain_socket(AF_UNIX, SOCK_DGRAM, 0));
-        exit_code = ERR_CONNECT;
-        goto close_ipc_socket;
-    }
-    lc_log_v(3, "Connected server process to IPC socket");
-
-    /* Enabling non-block mode on IPC sockets */
-    lc_log_v(4, "Switching IPC socket to non-blocking I/O mode");
-    int flags;
-    flags = fcntl(socktrans.fd, F_GETFL, 0);
-    if(fcntl(socktrans.fd, F_SETFL, flags | O_NONBLOCK) < 0){
-        lc_error("ERROR - fnctl(): can't switch socket to non-blocking I/O mode\n");
-        exit_code = ERR_FCNTL;
-        goto close_ipc_socket;
-    }
-
     /* Creating message bay */
-    int bay_pid;
-    if((bay_pid = fork_bay(socktrans)) < 0){
+    int newclientfd = -1;
+    pthread_t bay_thr;
+    pthread_mutex_t bay_mtx = PTHREAD_MUTEX_INITIALIZER;
+    bay_arg b_arg = {&newclientfd, &bay_mtx};
+
+    if((pthread_create(&bay_thr, NULL, bay_thread, &b_arg)) < 0){
         lc_error("ERROR - fork(): can't fork message bay subprocess\nProbably low memory or corruption");
         exit_code = ERR_CREATEBAY;
-        goto close_ipc_socket;
+        goto kill_bay;
     }
-    lc_log_v(3, "Forked message bay subprocess");
+    lc_log_v(3, "Intitalized message bay thread");
 
     /* Listen for incoming connections */
     if((listen(listener.fd, SOMAXCONN)) < 0){
@@ -191,42 +146,36 @@ int main(int argc, char** argv){
     /* Main listener loop */
     struct sockaddr_in newcliaddr;
     uint nclilen = sizeof(newcliaddr);
-    int newsockfd;
+    int tempsockfd;
+    int flags;
     while(!lc_done){
-        newsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
-        if(newsockfd < 0){
+        tempsockfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
+        if(tempsockfd < 0){
             lc_error("ERROR - accept(): can't accept incoming connection\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
             exit_code = ERR_ACCEPT;
-            goto close_ipc_socket;
+            goto kill_bay;
         }
         lc_log_v(2, "Reveived incoming connection from %s:%u", inet_ntoa(newcliaddr.sin_addr), ntohs(newcliaddr.sin_port));
         lc_log_v(4, "Created new socket for client %s:%u", inet_ntoa(newcliaddr.sin_addr), ntohs(newcliaddr.sin_port));
 
         lc_log_v(4, "Switching client socket to non-blocking I/O mode");
-        flags = fcntl(newsockfd, F_GETFL, 0);
-        if(fcntl(newsockfd, F_SETFL, flags | O_NONBLOCK) < 0){
+        flags = fcntl(tempsockfd, F_GETFL, 0);
+        if(fcntl(tempsockfd, F_SETFL, flags | O_NONBLOCK) < 0){
             lc_error("ERROR - fnctl() error");
             exit_code = ERR_FCNTL;
-            goto close_ipc_socket;
+            goto kill_bay;
         }
 
-        /* Sending connected client socket fd to bay */
-        lc_log_v(4, "Sending new socket file descriptor to IPC with SCM_RIGHTS msghdr");
-        n = ancil_send_fd(socktrans.fd, newsockfd);
-        if(n < 0){
-            lc_error("ERROR in main() - can't send ancillary fd");
-            exit_code = ERR_SEND;
-            goto close_ipc_socket;
-        }
+        pthread_mutex_lock(&bay_mtx);
+        newclientfd = tempsockfd;
+        pthread_mutex_unlock(&bay_mtx);
 
         usleep(100000);
     }
 
-close_ipc_socket:
-    lc_log_v(2, "Closing IPC socks");
-    lc_log_v(3, "Closing socktrans socket");
-    kill(bay_pid, SIGKILL);
-    close(socktrans.fd);
+kill_bay:
+    lc_log_v(3, "Stopping bay thread");
+    pthread_kill(bay_thr, SIGTERM);
 close_listener:
     lc_log_v(2, "Closing listener socket");
     close(listener.fd);

@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 int add_client(struct bay_s *bay, int fd){
-    int* temp = realloc(bay->clientsfd, ++bay->count);
+    int* temp = realloc(bay->clientsfd, ++(bay->count) * sizeof(int));
     if(temp == NULL) return -1;
 
     bay->clientsfd = temp;
@@ -51,16 +51,8 @@ void broadcast(struct bay_s *bay, message* msg, int size){
      }
 }
 
-int fork_bay(Socket_un socktrans){
-    int pid = fork();
-    if(pid < 0)        // fork() failed
-        return -1;
-    if(pid > 0)         // it's parent process -> return child's pid
-        return pid;
-
-    /* Now we are in child process */
-
-    /* React on SIGTERM and SIGKILL */
+void* bay_thread(void* arg){
+    /* Making server react on SIGTERM and SIGKILL */
     struct sigaction action;
     memset(&action, 0, sizeof(struct sigaction));
     action.sa_handler = lc_term;
@@ -68,29 +60,29 @@ int fork_bay(Socket_un socktrans){
     sigaction(SIGKILL, &action, NULL);
     sigaction(SIGINT, &action, NULL);
 
+    bay_arg* args = (bay_arg*) arg;
+    int* newclientfd = args->newclientfd;
+    pthread_mutex_t* mtx = args->mtx;
+
     struct bay_s bay;
     bay.clientsfd = NULL;
     bay.count = 0;
 
     int n, i;
     message chatmsg;
-    int     newclientfd;
 
     signal(SIGPIPE, SIGINT);
 
     while(!lc_done){
-        memset(&chatmsg, 0, sizeof(chatmsg));
-        n = ancil_recv_fd(socktrans.fd, &newclientfd);
-        if(n < 0){ // seems like bug: getting -1 on succsess
-            if(errno != EAGAIN && errno != EINTR){
-                lc_error("ERROR - ancil_recv_fd(): couldn't receive ancillary fd\n%s", explain_socket(AF_UNIX, SOCK_DGRAM, 0));
+        pthread_mutex_lock(mtx);
+        if(*newclientfd != -1){
+            if(add_client(&bay, *newclientfd) < 0){
+                lc_error("ERROR - add_client(): can't add new client, realloc() failure\nProbably low memory or corruption");
                 goto exit;
             }
-        } else
-        if(add_client(&bay, newclientfd) < 0){
-            lc_error("ERROR - add_client(): can't add new client, realloc() failure\nProbably low memory or corruption");
-            goto exit;
+            *newclientfd = -1;
         }
+        pthread_mutex_unlock(mtx);
 
         for(i = 0; i < bay.count; i++){
             int fd = bay.clientsfd[i];
@@ -111,6 +103,5 @@ int fork_bay(Socket_un socktrans){
 exit:
     lc_log_v(3, "Freeing bay");
     free(bay.clientsfd);
-    close(socktrans.fd);
     exit(0);
 }
