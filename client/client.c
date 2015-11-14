@@ -1,4 +1,6 @@
 #include "client.h"
+#include "interface.h"
+
 #include <stdio.h>
 #include <limits.h>
 #include <unistd.h>
@@ -11,6 +13,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #include <libexplain/socket.h>
 #include <libexplain/gethostbyname.h>
@@ -122,7 +125,15 @@ int main(int argc, char** argv){
     }
 
     /* Involving interface in separate thread */
-    /* @TODO ncurses TUI */
+    msgqueue *inqueue = calloc(sizeof(msgqueue), 0)
+            ,*outqueue = calloc(sizeof(msgqueue), 0);
+    pthread_mutex_init(&inqueue->mtx, NULL);
+    pthread_mutex_init(&outqueue->mtx, NULL);
+    interface_tdata interface_args = {inqueue, outqueue };
+    pthread_t interface_thread;
+    if(pthread_create(&interface_thread, NULL, interface, &interface_args) < 0){
+        // error handling
+    }
 
     /* Client thread */
 
@@ -189,17 +200,26 @@ int main(int argc, char** argv){
             goto close_client;
         }
         if(n > 0){
-            printf("%s: %s", msg.username, msg.text);
+            pthread_mutex_lock(&inqueue->mtx);
+            lc_msgque_queue(inqueue, &msg);
+            pthread_mutex_unlock(&inqueue->mtx);
+            memset(&msg, '\0', sizeof(message));
         }
 
-        if(fgets(buffer, sizeof(buffer), stdin) != NULL){
-            strcpy(msg.text, buffer);
-            n = lc_send_non_block(clifd, &msg, sizeof(msg), 0);
+        pthread_mutex_lock(&outqueue->mtx);
+        if(outqueue->lenght > 0){
+            message* out = lc_msgque_pop(&outqueue);
+            n = lc_send_non_block(clifd, out, sizeof(message), 0);
             if(n < 0){
                 exit_code = ERR_SEND;
                 goto close_client;
             }
+            free(out);
+            pthread_mutex_unlock(&outqueue->mtx);
         }
+        pthread_mutex_unlock(&outqueue->mtx);
+
+        usleep(10000);
     }
 
 

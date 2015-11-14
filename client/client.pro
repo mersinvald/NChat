@@ -9,7 +9,7 @@ SOURCES += \
     client.c \
     interface.c
 
-LIBS += -lexplain
+LIBS += -lexplain -lpthread
 
 unix:!macx: LIBS += -L$$OUT_PWD/../libchat/ -lchat
 
