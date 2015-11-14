@@ -38,6 +38,7 @@ void* interface(void* arg){
     message *inmsg, *outmsg;
     outmsg = malloc(sizeof(message));
     while(1){
+        /* check if there are incoming messages */
         pthread_mutex_lock(inqueue->mtx);
         if(inqueue->lenght > 0){
             inmsg = (message*) pop(inqueue);
@@ -49,6 +50,7 @@ void* interface(void* arg){
         }
         pthread_mutex_unlock(inqueue->mtx);
 
+        /* check if there is user input */
         pthread_mutex_lock(&input_mtx);
         if(input_queue.lenght > 0){
             char* text = (char*) pop(&input_queue);

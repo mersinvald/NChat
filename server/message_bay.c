@@ -15,7 +15,7 @@
 #include <memory.h>
 #include <unistd.h>
 
-volatile int lastcliindex = 0;
+volatile int  lastcliindex = 0;
 struct bay_s* bay;
 
 int add_client(struct bay_s *bay, int fd){
@@ -46,9 +46,9 @@ void broadcast(struct bay_s *bay, message* msg, int size){
     for(i = 0; i < bay->count; i++){
         lastcliindex = i;
         fd = bay->clientsfd[i];
-        n = lc_send_non_block(fd, msg, size, 0);
-        if(n < 0){
-            lc_error("ERROR - lc_send_non_block(): got -1, deleting this client");
+        if(lc_send_non_block(fd, msg, size, 0) <= 0){
+            lc_error("Error occured while broadcasting. Retrying");
+            i = lastcliindex - 1;
         }
      }
 }
@@ -113,7 +113,7 @@ void* bay_thread(void* arg){
             }
         }
 
-       usleep(100000);
+       usleep(10000);
     }
 
 exit:
