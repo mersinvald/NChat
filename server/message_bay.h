@@ -12,7 +12,5 @@ struct bay_s {
     int count;
 };
 
-typedef struct bay_arg bay_arg;
-
 #endif // MESSAGE_BAY_H
 

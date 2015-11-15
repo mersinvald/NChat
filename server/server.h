@@ -14,12 +14,5 @@ struct config_s {
 
 typedef struct config_s config;
 
-struct ipc_data_s {
-    int fd;
-    int pid;
-};
-
-typedef struct ipc_data_s ipc_data;
-
 #endif // SERVER_H
 
