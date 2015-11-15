@@ -8,29 +8,29 @@
 #define LC_MSG_TEXT_LEN 2048
 #define LC_MSG_USERNAME_LEN 32
 
-struct socket_in_s {
+struct lc_socket_in_s {
     int    fd;
     uint    slen;
     struct sockaddr_in saddr;
 };
 
-typedef struct socket_in_s Socket_in;
+typedef struct lc_socket_in_s lc_sockin_t;
 
-struct socket_un_s {
+struct lc_socket_un_s {
     int    fd;
     uint    slen;
     struct sockaddr_un saddr;
 };
 
-typedef struct socket_un_s Socket_un;
+typedef struct lc_socket_un_s lc_sockun_t;
 
-struct message_s {
+struct lc_message_s {
     char   text[2048];
     char   username[32];
     int    id;
     time_t out_time;
 };
 
-typedef struct message_s message;
+typedef struct lc_message_s lc_message_t;
 
 #endif // LIBCHAT_H
