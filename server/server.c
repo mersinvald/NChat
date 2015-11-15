@@ -57,13 +57,28 @@ int parse_args(config* conf, int argc, char** argv){
     return 0;
 }
 
+volatile int listener_done = 0;
+int listener_term_handler(int signum){
+    char sig[16];
+    switch(signum){
+    case SIGINT:  strcpy(sig, "SIGINT");  break;
+    case SIGTERM: strcpy(sig, "SIGTERM"); break;
+    case SIGKILL: strcpy(sig, "SIGKILL"); break;
+    default:  return -1;
+    }
+    lc_log_v(1, "Got %s, shutting down.", sig);
+    listener_done = 1;
+    return 0;
+}
+
+
 int main(int argc, char** argv){
     int exit_code = ERR_NO;
 
     /* Making server react on SIGTERM and SIGKILL */
     struct sigaction action;
     memset(&action, 0, sizeof(struct sigaction));
-    action.sa_handler = lc_term;
+    action.sa_handler = listener_term_handler;
     sigaction(SIGTERM, &action, NULL);
     sigaction(SIGKILL, &action, NULL);
     sigaction(SIGINT, &action, NULL);
@@ -126,15 +141,15 @@ int main(int argc, char** argv){
     /* Creating message bay */
     pthread_t bay_thr;
     pthread_mutex_t bay_mtx = PTHREAD_MUTEX_INITIALIZER;
-    queue* bay_q = malloc(sizeof(queue));
+    lc_queue_t* bay_q = malloc(sizeof(lc_queue_t));
     bay_q->ssize = sizeof(int);
     bay_q->lenght = 0;
     bay_q->mtx = &bay_mtx;
 
     if((pthread_create(&bay_thr, NULL, bay_thread, bay_q)) < 0){
-        lc_error("ERROR - fork(): can't fork message bay subprocess\nProbably low memory or corruption");
+        lc_error("ERROR - pthread_create(): can't create bay thread\nProbably low memory or corruption");
         exit_code = ERR_CREATEBAY;
-        goto kill_bay;
+        goto close_listener;
     }
     lc_log_v(3, "Intitalized message bay thread");
 
@@ -142,7 +157,7 @@ int main(int argc, char** argv){
     if((listen(listener.fd, SOMAXCONN)) < 0){
         lc_error("ERROR - listen(): can't start listening TCP connections\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
         exit_code = ERR_LISTEN;
-        goto close_listener;
+        goto kill_bay;
     }
     lc_log_v(1, "Listening on port %u", conf.port);
 
@@ -170,7 +185,10 @@ int main(int argc, char** argv){
         }
 
         pthread_mutex_lock(&bay_mtx);
-        add(bay_q, &newclientfd);
+        if(lc_queue_add(bay_q, &newclientfd) < 0){
+            lc_error("ERROR - lc_queue_add(): can't add new fd to queue\nProbably low memory or corruption");
+            goto kill_bay;
+        }
         pthread_mutex_unlock(&bay_mtx);
 
         usleep(100000);
@@ -181,6 +199,7 @@ kill_bay:
     pthread_kill(bay_thr, SIGTERM);
 close_listener:
     lc_log_v(2, "Closing listener socket");
+    shutdown(listener.fd, SHUT_RDWR);
     close(listener.fd);
 close_files:
     if(LC_LOG_TO_FILE) fclose(logfile);

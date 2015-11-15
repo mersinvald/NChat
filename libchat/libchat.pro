@@ -12,23 +12,20 @@ CONFIG += staticlib
 
 LIBS += -lexplain
 
-SOURCES += libchat.c \
+SOURCES += \
     log.c \
     error.c \
     non_block_io.c \
     fd_recv.c \
     fd_send.c \
-    sig_handler.c \
     queue.c
 
 HEADERS += \
     types.h \
-    libchat.h \
     log.h \
     error.h \
     non_block_io.h \
     ancillary.h \
-    sig_handler.h \
     queue.h
 
 unix {

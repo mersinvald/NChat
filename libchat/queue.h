@@ -6,26 +6,26 @@
 #define QUEUE_INITIALIZER(ssize, mtx) {NULL, 0, ssize, mtx}
 
 /* list node */
-struct qnode_s {
+struct lc_qnode_s {
     void* var;
-    struct qnode_s *next;
+    struct lc_qnode_s *next;
 };
 
 /* queue header */
-struct queue_s{
-    struct qnode_s* top;  /* first node */
+struct lc_queue_s{
+    struct lc_qnode_s* top;  /* first node */
     int    lenght;        /* queue length */
     size_t ssize;         /* sizeof(element_type) */
 
     pthread_mutex_t* mtx; /* mutex for purpose of multithreading usage */
 };
 
-typedef struct queue_s queue;
-typedef struct qnode_s qnode;
+typedef struct lc_queue_s lc_queue_t;
+typedef struct lc_qnode_s lc_qnode_t;
 
 
 
-extern int        add(queue* q, void* var);
+extern int         lc_queue_add(lc_queue_t* q, void* var);
 /* queue an element
  * @param
  * queue* q  - queue header
@@ -36,7 +36,7 @@ extern int        add(queue* q, void* var);
  * -1 if error
  */
 
-extern void*      pop(queue* q);
+extern void*       lc_queue_pop(lc_queue_t* q);
 /* extract the first element
  * @param
  * queue* q  - queue header
@@ -46,7 +46,7 @@ extern void*      pop(queue* q);
  * NULL if error
  */
 
-extern qnode*   back(queue* q);
+extern lc_qnode_t* lc_queue_back(lc_queue_t* q);
 /* get pointer to the last node
  * @param
  * queue* q  - queue header

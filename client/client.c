@@ -37,7 +37,7 @@ void usage(char* arg0){
            arg0, DEFAULT_LOGFILE, DEFAULT_USERNAME, DEFAULT_VERB);
 }
 
-int parse_args(config* conf, int argc, char** argv){
+int parse_args(config_t* conf, int argc, char** argv){
     int n, i;
     int verb = 0;
     int hostflag = 0, ipflag = 0, portflag = 0;
@@ -80,13 +80,12 @@ int parse_args(config* conf, int argc, char** argv){
     return 0;
 }
 
-int check_conf(config* conf){
+int check_conf(config_t* conf){
     return (conf->serv_hostname != NULL || conf->serv_ip != NULL) && (conf->serv_port > 0);
 }
 
-int init_msg(message *msg){
-    //@TODO memset error handling
-    memset(msg, '\0', sizeof(message));
+int init_msg(lc_message_t *msg){
+    memset(msg, '\0', sizeof(lc_message_t));
     strcpy(msg->username, conf.username);
     return 0;
 }
@@ -104,7 +103,7 @@ int main(int argc, char** argv){
     conf.logfile       = DEFAULT_LOGFILE;
     conf.username      = DEFAULT_USERNAME;
 
-
+    /* Getting command-line args */
     if(parse_args(&conf, argc, argv) < 0 || !check_conf(&conf)){
         usage(argv[0]);
         exit_code = ERR_PARSEARGS;
@@ -117,8 +116,10 @@ int main(int argc, char** argv){
     /* Rerouting log to file */
     FILE* logfile;
     if(conf.logfile != NULL){
-        if((logfile = fopen(conf.logfile, "w+")) == NULL)
+        if((logfile = fopen(conf.logfile, "w+")) == NULL){
             lc_error("ERROR - fopen(): can't open file %s\n%s", conf.logfile, explain_fopen(conf.logfile, "w+"));
+            goto exit;
+        }
         else
             lc_log_to_file(logfile);
     }
@@ -126,20 +127,20 @@ int main(int argc, char** argv){
     /* Preparing data for interface thread */
     pthread_mutex_t inmtx  = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t outmtx = PTHREAD_MUTEX_INITIALIZER;
-    queue inqueue  = QUEUE_INITIALIZER(sizeof(message), &inmtx);
-    queue outqueue = QUEUE_INITIALIZER(sizeof(message), &outmtx);
+    lc_queue_t inqueue  = QUEUE_INITIALIZER(sizeof(lc_message_t), &inmtx);
+    lc_queue_t outqueue = QUEUE_INITIALIZER(sizeof(lc_message_t), &outmtx);
 
-    interface_tdata* interface_args = malloc(sizeof(interface_tdata));
+    interface_tdata_t* interface_args = malloc(sizeof(interface_tdata_t));
     interface_args->inqueue  = &inqueue;
     interface_args->outqueue = &outqueue;
 
     /* Invoking interface thread */
     pthread_t interface_thread;
-    if(pthread_create(&interface_thread, NULL, interface, interface_args) < 0){
-        // error handling
+    if(pthread_create(&interface_thread, NULL, interface, interface_args) != 0){
+        lc_error("ERROR - pthread_create(): couldn't invoke interface thread");
+        exit_code = ERR_PTHREAD;
+        goto exit;
     }
-
-    /* Client thread */
 
     /* Resolving IP address if hostneme was passed */
     if(conf.serv_hostname != NULL){
@@ -149,7 +150,7 @@ int main(int argc, char** argv){
         if((he = gethostbyname(conf.serv_hostname)) == NULL){
             lc_error("ERROR - gethostbyname: can't resolve server's ip\n%s", explain_gethostbyname(conf.serv_hostname));
             exit_code = ERR_RESOLVE;
-            goto close_logfile;
+            goto exit;
         }
 
         conf.serv_ip = malloc(3*4*sizeof(char));
@@ -165,7 +166,7 @@ int main(int argc, char** argv){
     if(clifd < 0){
         lc_error("ERROR - socket(): can't create client TCP socket\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
         exit_code = ERR_CREATESOCK;
-        goto close_logfile;
+        goto exit;
     }
 
     /* Setting up server struct */
@@ -193,25 +194,27 @@ int main(int argc, char** argv){
         goto close_client;
     }
 
-    message msg;
+    /* Main client socket */
+    lc_message_t msg;
     while(1){
-
-        n = lc_recv_non_block(clifd, &msg, sizeof(message), 0);
+        /* Receiving messages from server */
+        memset(&msg, '\0', sizeof(lc_message_t));
+        n = lc_recv_non_block(clifd, &msg, sizeof(lc_message_t), 0);
         if(n < 0){
             exit_code = ERR_RECV;
             goto close_client;
         }
         if(n > 0){
             pthread_mutex_lock(inqueue.mtx);
-            add(&inqueue, &msg);
+            if(lc_queue_add(&inqueue, &msg) < 0) lc_error("ERROR - lc_queue_add(): can't queue received message");
             pthread_mutex_unlock(inqueue.mtx);
-            memset(&msg, '\0', sizeof(message));
         }
 
+        /* Sending message to server */
         pthread_mutex_lock(outqueue.mtx);
         if(outqueue.lenght > 0){
-            message* out = (message*) pop(&outqueue);
-            n = lc_send_non_block(clifd, out, sizeof(message), 0);
+            lc_message_t* out = (lc_message_t*) lc_queue_pop(&outqueue);
+            n = lc_send_non_block(clifd, out, sizeof(lc_message_t), 0);
             if(n < 0){
                 exit_code = ERR_SEND;
                 goto close_client;
@@ -229,10 +232,9 @@ int main(int argc, char** argv){
 close_client:
     shutdown(clifd, SHUT_RDWR);
     close(clifd);
-close_logfile:
 exit:
     lc_log_v(1, "Exititng with code %i", exit_code);
-    if(LC_LOG_TO_FILE) fclose(logfile);
+    if(LC_LOG_TO_FILE) fcloseall();
     return exit_code;
 }
 

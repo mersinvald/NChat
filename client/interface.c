@@ -6,12 +6,12 @@
 #include <unistd.h>
 
 void* input(void* arg){
-    queue* in_q = (queue*) arg;
+    lc_queue_t* in_q = (lc_queue_t*) arg;
     char buffer[LC_MSG_TEXT_LEN];
     while(1){
         if(fgets(buffer, LC_MSG_TEXT_LEN, stdin) != NULL){
             pthread_mutex_lock(in_q->mtx);
-            add(in_q, &buffer);
+            lc_queue_add(in_q, &buffer);
             memset(buffer, '\0', strlen(buffer));
             pthread_mutex_unlock(in_q->mtx);
         }
@@ -19,14 +19,14 @@ void* input(void* arg){
 }
 
 void* interface(void* arg){
-    interface_tdata* data = (interface_tdata*) arg;
-    queue *inqueue = data->inqueue;
-    queue *outqueue = data->outqueue;
+    interface_tdata_t* data = (interface_tdata_t*) arg;
+    lc_queue_t *inqueue = data->inqueue;
+    lc_queue_t *outqueue = data->outqueue;
 
 
     /* Setting up input thread */
     pthread_mutex_t input_mtx = PTHREAD_MUTEX_INITIALIZER;
-    queue input_queue;
+    lc_queue_t input_queue;
     input_queue.lenght = 0;
     input_queue.mtx = &input_mtx;
     input_queue.ssize = LC_MSG_TEXT_LEN;
@@ -35,13 +35,13 @@ void* interface(void* arg){
     pthread_create(&input_thread, NULL, &input, &input_queue);
 
     /* Interface loop */
-    message *inmsg, *outmsg;
-    outmsg = malloc(sizeof(message));
+    lc_message_t *inmsg, *outmsg;
+    outmsg = malloc(sizeof(lc_message_t));
     while(1){
-        /* check if there are incoming messages */
+        /* Check if there are incoming messages */
         pthread_mutex_lock(inqueue->mtx);
         if(inqueue->lenght > 0){
-            inmsg = (message*) pop(inqueue);
+            inmsg = (lc_message_t*) lc_queue_pop(inqueue);
             if(inmsg == NULL)
                 goto exit;
             pthread_mutex_unlock(inqueue->mtx);
@@ -50,17 +50,17 @@ void* interface(void* arg){
         }
         pthread_mutex_unlock(inqueue->mtx);
 
-        /* check if there is user input */
+        /* Check if there is user input */
         pthread_mutex_lock(&input_mtx);
         if(input_queue.lenght > 0){
-            char* text = (char*) pop(&input_queue);
+            char* text = (char*) lc_queue_pop(&input_queue);
             int textlen = strlen(text);
 
             init_msg(outmsg);
 
             strcpy(outmsg->text, text);
             pthread_mutex_lock(outqueue->mtx);
-            add(outqueue, outmsg);
+            lc_queue_add(outqueue, outmsg);
             pthread_mutex_unlock(outqueue->mtx);
 
             memset(outmsg, '\0', textlen * sizeof(char));
