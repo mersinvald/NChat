@@ -11,7 +11,7 @@ int lc_queue_add(lc_queue_t* q, void* var){
         q->top->var = malloc(q->ssize);
         memcpy(q->top->var, var, q->ssize);
     } else {
-        lc_qnode_t* b = back(q);                 /* находим последнюю ноду */
+        lc_qnode_t* b = lc_queue_back(q);                 /* находим последнюю ноду */
         b->next = malloc(sizeof(lc_qnode_t));    /* резервируем память под еще одну ноду в конце */
         b->next->next = NULL;               /* принудительно зануляем указатель */
         b->next->var = malloc(q->ssize);    /* резервируем память под новый элеиент в соответствии с указанным заранее ssize */
@@ -21,7 +21,7 @@ int lc_queue_add(lc_queue_t* q, void* var){
     return 0;
 }
 
-void* pop(lc_queue_t* q){
+void* lc_queue_pop(lc_queue_t* q){
     if(q == NULL) return NULL;
 
     void* var = q->top->var;       /* этот указатель будем возвращать */
@@ -37,7 +37,7 @@ void* pop(lc_queue_t* q){
                                       ПАМЯТЬ НАДО ОСВОБОДИТЬ ВРУЧНУЮ ПРИ ПОЛУЧЕНИИ УКАЗАТЕЛЯ */
 }
 
-lc_qnode_t* back(lc_queue_t* q){ /* тут все ясно */
+lc_qnode_t* lc_queue_back(lc_queue_t* q){ /* тут все ясно */
     if(q == NULL) return NULL;
 
     lc_qnode_t* node = q->top;
