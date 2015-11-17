@@ -13,7 +13,7 @@
 
 volatile char resized = 0;
 
-void resize_handler(int signum){
+void resize_handler(int dummy){
     resized = 1;
 }
 
@@ -103,11 +103,26 @@ void print_message(window_t* win, lc_message_t* msg){
         y--;
     }
 
-    wattrset(win->win, A_BOLD |                                               /* making username bold */
-            (!strcmp(msg->username, conf.username)) ? A_UNDERLINE : 0);       /* and underlined if it's client's username */
+    int usernames = strcmp(msg->username, conf.username);
+
+    wattrset(win->win, A_BOLD | ((usernames == 0) ? A_UNDERLINE : 0));        /* making username bold */
     mvwprintw(win->win, y, x, "%s", msg->username);                           /* print username */
     wattrset(win->win, A_NORMAL);                                             /* disabling bold */
-    mvwprintw(win->win, y++, x + strlen(conf.username), ": %s", msg->text);   /* print message text */
+    mvwprintw(win->win, y++, x + strlen(msg->username), ": %s", msg->text);   /* print message text */
+}
+
+volatile int interface_done = 0;
+
+void interface_term_handler(int signum){
+    char sig[16];
+    switch(signum){
+    case SIGINT:  strcpy(sig, "SIGINT");  break;
+    case SIGTERM: strcpy(sig, "SIGTERM"); break;
+    case SIGKILL: strcpy(sig, "SIGKILL"); break;
+    default:  sprintf(sig, "SIGNAL %i", signum);
+    }
+    lc_log_v(1, "Interface: Got %s, shutting down.", sig);
+    interface_done = 1;
 }
 
 void* interface(void* arg){
@@ -115,6 +130,14 @@ void* interface(void* arg){
     interface_tdata_t* data = (interface_tdata_t*) arg;
     lc_queue_t *inqueue = data->inqueue;
     lc_queue_t *outqueue = data->outqueue;
+
+    /* Making interface react on SIGTERM and SIGKILL */
+    struct sigaction termaction;
+    memset(&termaction, 0, sizeof(struct sigaction));
+    termaction.sa_handler = interface_term_handler;
+    sigaction(SIGTERM, &termaction, NULL);
+    sigaction(SIGKILL, &termaction, NULL);
+    sigaction(SIGINT, &termaction, NULL);
 
     /* Resize signal handler */
     struct sigaction action;
@@ -165,10 +188,7 @@ void* interface(void* arg){
 
     /* Setting up input thread */
     pthread_mutex_t input_mtx = PTHREAD_MUTEX_INITIALIZER;
-    lc_queue_t input_queue;
-    input_queue.lenght = 0;
-    input_queue.mtx = &input_mtx;
-    input_queue.ssize = LC_MSG_TEXT_LEN;
+    lc_queue_t input_queue    = LC_QUEUE_INITIALIZER(LC_MSG_TEXT_LEN, &input_mtx);
     struct input_data input_args = {&input_queue, &input};
 
     pthread_t input_thread;
@@ -181,7 +201,7 @@ void* interface(void* arg){
     /* Interface loop */
     lc_message_t *inmsg, *outmsg;
     outmsg = malloc(sizeof(lc_message_t));
-    while(1){
+    while(!interface_done){
         /* Check if screen resized */
         if(W != COLS || H != LINES)
             resized = 1;
@@ -230,14 +250,15 @@ void* interface(void* arg){
         }
         pthread_mutex_unlock(&input_mtx);
 
-        usleep(10000);
+        usleep(1000);
     }
 kill_input:
+    /* there is no sighandler in input thread, so cutting out it's fucking head */
     pthread_kill(input_thread, SIGKILL);
 exit_curses:
     window_delete(&input);
     window_delete(&chat);
     endwin();
-exit:
+
     pthread_exit(exit_code);
 }
