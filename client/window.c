@@ -5,7 +5,7 @@ enum {
     ERR_WINCREATE = 10,
 };
 
-void window_set(window_t *win, WINDOW *wptr, int h, int w, int y, int x) {
+void window_set(window_t *win, WINDOW *wptr, ushort h, ushort w, ushort y, ushort x) {
     if(wptr != NULL)
         win->win = wptr;
     win->h = h;

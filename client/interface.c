@@ -43,8 +43,8 @@ int resize(int* W, int* H, window_t* chat, window_t* input) {
 
     ushort input_h = input->h;
 
-    n = window_set(input, NULL, input_h, (*W), (*H)-input_h, 0);
-    n = window_set(chat, NULL, (*H)-input_h, (*W), 0, 0);
+    window_set(input, NULL, input_h, (*W), (*H)-input_h, 0);
+    window_set(chat, NULL, (*H)-input_h, (*W), 0, 0);
 
     n = window_create(input);
     n = window_create(chat);
@@ -205,7 +205,6 @@ void* interface(void* arg){
             }
             pthread_mutex_unlock(inqueue->mtx);
 
-            lc_queue_add(&history, inmsg);
             print_message(&chat, inmsg);
             window_refresh(&chat);
 

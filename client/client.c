@@ -39,7 +39,7 @@ void usage(char* arg0){
 
 int parse_args(config_t* conf, int argc, char** argv){
     int n, i;
-    int verb = 0;
+    char verb = 0;
     int hostflag = 0, ipflag = 0, portflag = 0;
     while((n = getopt(argc, argv, "p:u:l:v")) != -1){
         switch(n){
@@ -84,14 +84,13 @@ int check_conf(config_t* conf){
     return (conf->serv_hostname != NULL || conf->serv_ip != NULL) && (conf->serv_port > 0);
 }
 
-int init_msg(lc_message_t *msg){
+void init_msg(lc_message_t *msg){
     memset(msg, '\0', sizeof(lc_message_t));
     strcpy(msg->username, conf.username);
-    return 0;
 }
 
 int main(int argc, char** argv){
-    int exit_code = ERR_NO;
+    char exit_code = ERR_NO;
     int n, i;
 
     /* Setting up default config */
@@ -171,7 +170,7 @@ int main(int argc, char** argv){
 
     /* Setting up server struct */
     struct sockaddr_in saddr;
-    uint saddrlen;
+    ushort saddrlen;
     memset(&saddr, 0, sizeof(saddr));
 
     saddr.sin_addr.s_addr = inet_addr(conf.serv_ip);
@@ -234,7 +233,7 @@ close_client:
     close(clifd);
 exit:
     lc_log_v(1, "Exititng with code %i", exit_code);
-    if(LC_LOG_TO_FILE) fcloseall();
+    if(LC_LOG_TO_FILE) fclose(logfile);
     return exit_code;
 }
 
