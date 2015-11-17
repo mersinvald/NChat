@@ -7,9 +7,10 @@ INCLUDEPATH += "../"
 
 SOURCES += \
     client.c \
-    interface.c
+    interface.c \
+    window.c
 
-LIBS += -lexplain -lpthread
+LIBS += -lexplain -lpthread -lncurses
 
 unix:!macx: LIBS += -L$$OUT_PWD/../libchat/ -lchat
 
@@ -18,7 +19,8 @@ DEPENDPATH += $$PWD/../libchat
 
 HEADERS += \
     interface.h \
-    client.h
+    client.h \
+    window.h
 
 unix:!macx: LIBS += -L$$OUT_PWD/../libchat/ -lchat
 
