@@ -1,6 +1,9 @@
 #include "window.h"
+#include <log.h>
 
-/* @TODO Error Handling */
+enum {
+    ERR_WINCREATE = 10,
+};
 
 void window_set(window_t *win, WINDOW *wptr, int h, int w, int y, int x) {
     if(wptr != NULL)
@@ -13,26 +16,44 @@ void window_set(window_t *win, WINDOW *wptr, int h, int w, int y, int x) {
 
 int window_create(window_t *win) {
     win->win = newwin(win->h, win->w, win->y, win->x);
-    if(win->win == NULL) return -1;
+    if(win->win == NULL) {
+        lc_error("ERROR - window_create(): newwin() returned NULL");
+        window_errno = ERR_WINCREATE;
+        return ERR_WINCREATE;
+    }
 
     return 0;
 }
 
 int window_delete(window_t *win) {
-    delwin(win->win);
+    if((window_errno = delwin(win->win)) != OK){
+        lc_error("ERROR - window_delete(): delwin() failed with code %i)", window_errno);
+        return window_errno;
+    }
     return 0;
 }
 
 int window_clear(window_t* win){
-    wclear(win->win);
+    if((window_errno = wclear(win->win)) != OK){
+        lc_error("ERROR - window_clear(): wclear() failed with code %i)", window_errno);
+        return window_errno;
+    }
+    return 0;
 }
 
 int window_drawborder(window_t* win){
-    box(win->win, 0, 0);
+    if((window_errno = box(win->win, 0, 0)) != OK){
+        lc_error("ERROR - window_drawborder(): box() failed with code %i)", window_errno);
+        return window_errno;
+    }
+    return 0;
 }
 
 int window_refresh(window_t *win) {
-    wrefresh(win->win);
+    if((window_errno = wrefresh(win->win)) != OK){
+        lc_error("ERROR - window_refresh(): wrefresh() failed with code %i)", window_errno);
+        return window_errno;
+    }
     return 0;
 }
 
