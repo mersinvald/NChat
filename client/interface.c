@@ -9,7 +9,9 @@
 #include <unistd.h>
 #include <ncurses.h>
 
-volatile int resized = 0;
+#include <error.h>
+
+volatile char resized = 0;
 
 void resize_handler(int signum){
     resized = 1;
@@ -29,29 +31,33 @@ void reset(){
     refresh();
 }
 
-void resize(int* W, int* H, window_t* chat, window_t* input) {
+int resize(int* W, int* H, window_t* chat, window_t* input) {
     reset();
     *W = COLS;
     *H = LINES;
 
-    window_delete(input);
-    window_delete(chat);
+    int n;
 
-    int input_h = input->h;
+    n = window_delete(input);
+    n = window_delete(chat);
 
-    window_set(input, NULL, input_h, (*W), (*H)-input_h, 0);
-    window_set(chat, NULL, (*H)-input_h, (*W), 0, 0);
+    ushort input_h = input->h;
 
-    window_create(input);
-    window_create(chat);
+    n = window_set(input, NULL, input_h, (*W), (*H)-input_h, 0);
+    n = window_set(chat, NULL, (*H)-input_h, (*W), 0, 0);
 
-    window_drawborder(input);
+    n = window_create(input);
+    n = window_create(chat);
+
+    n = window_drawborder(input);
     window_drawborder(chat);
 
-    window_refresh(input);
-    window_refresh(chat);
+    n = window_refresh(input);
+    n = window_refresh(chat);
 
     resized = 0;
+
+    return n;
 }
 
 struct input_data {
@@ -64,10 +70,6 @@ void* input_handler(void* arg){
     lc_queue_t* q = args->q;
     window_t* win = args->input_win;
     char buffer[LC_MSG_TEXT_LEN];
-
-    int done = 0;
-    int pos = 0;
-    char ch;
 
     while(1){
         if(mvwgetstr(win->win, 1, 1, buffer) != -1){
@@ -84,8 +86,8 @@ void* input_handler(void* arg){
 }
 
 void print_message(window_t* win, lc_message_t* msg){
-    static int y = 1;
-    static int x = 1;
+    static ushort y = 1;
+    static ushort x = 1;
 
 
     if(y > win->h-2){
@@ -101,13 +103,15 @@ void print_message(window_t* win, lc_message_t* msg){
         y--;
     }
 
-    wattrset(win->win, A_BOLD | (!strcmp(msg->username, conf.username)) ? A_UNDERLINE : 0); /* making username bold */
-    mvwprintw(win->win, y, x, "%s", msg->username);        /* print username */
-    wattrset(win->win, A_NORMAL);                   /* disabling bold */
-    mvwprintw(win->win, y++, x + strlen(conf.username), ": %s", msg->text);  /* print message text */
+    wattrset(win->win, A_BOLD |                                               /* making username bold */
+            (!strcmp(msg->username, conf.username)) ? A_UNDERLINE : 0);       /* and underlined if it's client's username */
+    mvwprintw(win->win, y, x, "%s", msg->username);                           /* print username */
+    wattrset(win->win, A_NORMAL);                                             /* disabling bold */
+    mvwprintw(win->win, y++, x + strlen(conf.username), ": %s", msg->text);   /* print message text */
 }
 
 void* interface(void* arg){
+    int* exit_code = calloc(1, sizeof(int));
     interface_tdata_t* data = (interface_tdata_t*) arg;
     lc_queue_t *inqueue = data->inqueue;
     lc_queue_t *outqueue = data->outqueue;
@@ -125,8 +129,10 @@ void* interface(void* arg){
     int W = COLS;
     int H = LINES;
 
-    int input_h = 3;
+    /* input window size (1 for input, 2 for border) */
+    ushort input_h = 3;
 
+    /* setting up windows */
     window_set(&input,    /* window_t* */
                NULL,      /* WINDOW* */
                input_h,   /* height */
@@ -139,19 +145,23 @@ void* interface(void* arg){
                W,
                0,
                0);
-    window_create(&input);
-    window_create(&chat);
-    window_drawborder(&input);
-    window_drawborder(&chat);
-    window_refresh(&input);
-    window_refresh(&chat);
 
+    /* wrapper-functions with some error handling */
+    int n = 0;
+    n = window_create(&input);
+    n = window_create(&chat);
+    n = window_drawborder(&input);
+    n = window_drawborder(&chat);
+    n = window_refresh(&input);
+    n = window_refresh(&chat);
+    if(n < 0){
+        lc_error("ERROR windows initialization failed with code %i", window_errno);
+        *exit_code = ERR_CURSES;
+        goto exit_curses;
+    }
+
+    /* Enabling curses scroll for chat window */
     scrollok(chat.win, 1);
-
-    /* Chat history queue */
-    lc_queue_t history;
-    history.lenght = 0;
-    history.ssize = sizeof(lc_message_t);
 
     /* Setting up input thread */
     pthread_mutex_t input_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -164,6 +174,7 @@ void* interface(void* arg){
     pthread_t input_thread;
     if(pthread_create(&input_thread, NULL, input_handler, &input_args)){
         lc_error("ERROR - pthread_create(): can't create input interface thread");
+        *exit_code = ERR_PTHREAD;
         goto exit_curses;
     }
 
@@ -177,14 +188,21 @@ void* interface(void* arg){
 
         /* Handle resize */
         if(resized)
-            resize(&W, &H, &chat, &input);
+            if(resize(&W, &H, &chat, &input) != 0){
+                lc_error("ERROR resize handling failed with code %i", window_errno);
+                *exit_code = ERR_CURSES;
+                goto kill_input;
+            }
 
         /* Check if there are incoming messages */
         pthread_mutex_lock(inqueue->mtx);
         if(inqueue->lenght > 0){
             inmsg = (lc_message_t*) lc_queue_pop(inqueue);
-            if(inmsg == NULL)
-                goto exit;
+            if(inmsg == NULL){
+                lc_error("ERROR input(): input worker returned NULL");
+                *exit_code = ERR_INPUT;
+                goto kill_input;
+            }
             pthread_mutex_unlock(inqueue->mtx);
 
             lc_queue_add(&history, inmsg);
@@ -199,7 +217,7 @@ void* interface(void* arg){
         pthread_mutex_lock(&input_mtx);
         if(input_queue.lenght > 0){
             char* text = (char*) lc_queue_pop(&input_queue);
-            int textlen = strlen(text);
+            ushort textlen = strlen(text);
 
             init_msg(outmsg);
 
@@ -215,12 +233,12 @@ void* interface(void* arg){
 
         usleep(10000);
     }
-stop_input:
+kill_input:
     pthread_kill(input_thread, SIGKILL);
 exit_curses:
     window_delete(&input);
     window_delete(&chat);
     endwin();
 exit:
-    pthread_exit(1);
+    pthread_exit(exit_code);
 }
