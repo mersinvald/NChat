@@ -5,17 +5,17 @@
 
 int lc_queue_add(lc_queue_t* q, void* var){
     if(q == NULL) return -1;
-    if(q->top == NULL){ /* КОСТЫЛИ, переделать надо */
-        q->top      = malloc(sizeof(lc_qnode_t));
+    if(q->top == NULL){
+        q->top       = malloc(sizeof(lc_qnode_t));
         q->top->next = NULL;
-        q->top->var = malloc(q->ssize);
+        q->top->var  = malloc(q->ssize);
         memcpy(q->top->var, var, q->ssize);
     } else {
-        lc_qnode_t* b = lc_queue_back(q);                 /* находим последнюю ноду */
+        lc_qnode_t* b = lc_queue_back(q);        /* находим последнюю ноду */
         b->next = malloc(sizeof(lc_qnode_t));    /* резервируем память под еще одну ноду в конце */
-        b->next->next = NULL;               /* принудительно зануляем указатель */
-        b->next->var = malloc(q->ssize);    /* резервируем память под новый элеиент в соответствии с указанным заранее ssize */
-        memcpy(b->next->var, var, q->ssize);/* копируем память из переданного указателя в новый */
+        b->next->next = NULL;                    /* принудительно зануляем указатель */
+        b->next->var = malloc(q->ssize);         /* резервируем память под новый элеиент в соответствии с указанным заранее ssize */
+        memcpy(b->next->var, var, q->ssize);     /* копируем память из переданного указателя в новый */
     }
     q->lenght++; /* увеличиваем длину на 1 */
     return 0;
@@ -26,7 +26,7 @@ void* lc_queue_pop(lc_queue_t* q){
 
     void* var = q->top->var;       /* этот указатель будем возвращать */
 
-    lc_qnode_t* top = q->top;           /* запоминаем перый элемент */
+    lc_qnode_t* top = q->top;      /* запоминаем перый элемент */
     q->top = q->top->next;         /* делаем второй элемент первым */
     q->lenght--;                   /* декрементируем длину очереди */
 
@@ -37,7 +37,7 @@ void* lc_queue_pop(lc_queue_t* q){
                                       ПАМЯТЬ НАДО ОСВОБОДИТЬ ВРУЧНУЮ ПРИ ПОЛУЧЕНИИ УКАЗАТЕЛЯ */
 }
 
-lc_qnode_t* lc_queue_back(lc_queue_t* q){ /* тут все ясно */
+lc_qnode_t* lc_queue_back(lc_queue_t* q){
     if(q == NULL) return NULL;
 
     lc_qnode_t* node = q->top;

@@ -5,11 +5,11 @@
 #include <pthread.h>
 #include <types.h>
 
-extern void* bay_thread(void* arg);  // when new socket created to here is sent it's socket's fd
+extern void* bay_thread(void* arg);
 
 struct bay_s {
     int* clientsfd;
-    int count;
+    ushort count;
 };
 
 #endif // MESSAGE_BAY_H

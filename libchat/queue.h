@@ -2,8 +2,9 @@
 #define QUEUE_H
 
 #include <pthread.h>
+#include <stdlib.h>
 
-#define QUEUE_INITIALIZER(ssize, mtx) {NULL, 0, ssize, mtx}
+#define LC_QUEUE_INITIALIZER(ssize, mtxptr) {NULL, 0, ssize, mtxptr}
 
 /* list node */
 struct lc_qnode_s {
@@ -14,7 +15,7 @@ struct lc_qnode_s {
 /* queue header */
 struct lc_queue_s{
     struct lc_qnode_s* top;  /* first node */
-    int    lenght;        /* queue length */
+    ushort lenght;        /* queue length */
     size_t ssize;         /* sizeof(element_type) */
 
     pthread_mutex_t* mtx; /* mutex for purpose of multithreading usage */

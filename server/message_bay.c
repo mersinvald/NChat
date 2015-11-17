@@ -60,21 +60,20 @@ void bay_sigpipe_handler(int signum){
     }
 }
 
-int bay_term_handler(int signum){
+void bay_term_handler(int signum){
     char sig[16];
     switch(signum){
     case SIGINT:  strcpy(sig, "SIGINT");  break;
     case SIGTERM: strcpy(sig, "SIGTERM"); break;
     case SIGKILL: strcpy(sig, "SIGKILL"); break;
-    default:  return -1;
+    default:  sprintf(sig, "SIGNAL %i", signum);
     }
     lc_log_v(1, "Bay: Got %s, shutting down.", sig);
     bay_done = 1;
-    return 0;
 }
 
 void* bay_thread(void* arg){
-    /* Making server react on SIGTERM and SIGKILL */
+    /* Making bay react on SIGTERM and SIGKILL */
     struct sigaction termaction;
     memset(&termaction, 0, sizeof(struct sigaction));
     termaction.sa_handler = bay_term_handler;

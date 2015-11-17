@@ -126,8 +126,8 @@ int main(int argc, char** argv){
     /* Preparing data for interface thread */
     pthread_mutex_t inmtx  = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t outmtx = PTHREAD_MUTEX_INITIALIZER;
-    lc_queue_t inqueue  = QUEUE_INITIALIZER(sizeof(lc_message_t), &inmtx);
-    lc_queue_t outqueue = QUEUE_INITIALIZER(sizeof(lc_message_t), &outmtx);
+    lc_queue_t inqueue  = LC_QUEUE_INITIALIZER(sizeof(lc_message_t), &inmtx);
+    lc_queue_t outqueue = LC_QUEUE_INITIALIZER(sizeof(lc_message_t), &outmtx);
 
     interface_tdata_t* interface_args = malloc(sizeof(interface_tdata_t));
     interface_args->inqueue  = &inqueue;

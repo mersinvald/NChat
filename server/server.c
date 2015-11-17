@@ -57,17 +57,16 @@ int parse_args(config_t* conf, int argc, char** argv){
 }
 
 volatile int listener_done = 0;
-int listener_term_handler(int signum){
+void listener_term_handler(int signum){
     char sig[16];
     switch(signum){
     case SIGINT:  strcpy(sig, "SIGINT");  break;
     case SIGTERM: strcpy(sig, "SIGTERM"); break;
     case SIGKILL: strcpy(sig, "SIGKILL"); break;
-    default:  return -1;
+    default: sprintf(sig, "SIGNALL %i", signum);
     }
     lc_log_v(1, "Got %s, shutting down.", sig);
     listener_done = 1;
-    return 0;
 }
 
 
