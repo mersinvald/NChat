@@ -12,7 +12,7 @@ struct config_s {
     char*  name;
 };
 
-typedef struct config_s config;
+typedef struct config_s config_t;
 
 #endif // SERVER_H
 

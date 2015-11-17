@@ -23,9 +23,9 @@ struct config_s {
     char* username;
 };
 
-typedef struct config_s config;
+typedef struct config_s config_t;
 
-config conf;
+config_t conf;
 
 extern int init_msg(lc_message_t* msg);
 

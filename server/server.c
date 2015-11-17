@@ -15,7 +15,6 @@
 #include <log.h>
 #include <error.h>
 #include <non_block_io.h>
-#include <sig_handler.h>
 
 #include "queue.h"
 #include "message_bay.h"
@@ -37,7 +36,7 @@ void usage(char* arg0){
            arg0, DEFAULT_PORT, 2000, USHRT_MAX, DEFAULT_VERB);
 }
 
-int parse_args(config* conf, int argc, char** argv){
+int parse_args(config_t* conf, int argc, char** argv){
     int n;
     int verb = 0;
     while((n = getopt(argc, argv, "p:l:n:v")) != -1){
@@ -84,7 +83,7 @@ int main(int argc, char** argv){
     sigaction(SIGINT, &action, NULL);
 
     /* Setting up default config */
-    config conf = {
+    config_t conf = {
         DEFAULT_PORT,
         DEFAULT_VERB,
         DEFAULT_LOG,
@@ -115,8 +114,8 @@ int main(int argc, char** argv){
              conf.port, (conf.logfile != NULL) ? conf.logfile : "stdout/stderr", conf.verb);
 
     /* Initializing listening socket */
-    Socket_in listener;
-    memset(&listener, 0, sizeof(Socket_in));
+    lc_sockin_t listener;
+    memset(&listener, 0, sizeof(lc_sockin_t));
 
     listener.saddr.sin_addr.s_addr = htonl(INADDR_ANY);
     listener.saddr.sin_family = AF_INET;
@@ -148,7 +147,7 @@ int main(int argc, char** argv){
 
     if((pthread_create(&bay_thr, NULL, bay_thread, bay_q)) < 0){
         lc_error("ERROR - pthread_create(): can't create bay thread\nProbably low memory or corruption");
-        exit_code = ERR_CREATEBAY;
+        exit_code = ERR_PTHREAD;
         goto close_listener;
     }
     lc_log_v(3, "Intitalized message bay thread");
@@ -166,7 +165,7 @@ int main(int argc, char** argv){
     uint nclilen = sizeof(newcliaddr);
     int newclientfd;
     int flags;
-    while(!lc_done){
+    while(!listener_done){
         newclientfd = accept(listener.fd, (struct sockaddr*)&newcliaddr, &nclilen);
         if(newclientfd < 0){
             lc_error("ERROR - accept(): can't accept incoming connection\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));

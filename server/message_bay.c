@@ -6,7 +6,6 @@
 #include <types.h>
 #include <log.h>
 #include <non_block_io.h>
-#include <sig_handler.h>
 #include <ancillary.h>
 
 #include <libexplain/socket.h>
@@ -42,7 +41,7 @@ int del_client(struct bay_s *bay, int index){
     return 0;
 }
 
-void broadcast(struct bay_s *bay, message* msg, int size){
+void broadcast(struct bay_s *bay,lc_message_t* msg, int size){
     int i, fd;
     for(i = 0; i < bay->count; i++){
         lastclindex = i;
@@ -99,15 +98,15 @@ void* bay_thread(void* arg){
     bay->count = 0;
 
     int n, i, fd, *ptr;
-    message msg;
-    memset(&msg, '\0', sizeof(message));
+    lc_message_t msg;
+    memset(&msg, '\0', sizeof(lc_message_t));
 
     /* Bay loop */
     while(!bay_done){
         /* Receiving new client's fd from listener */
         pthread_mutex_lock(mtx);
         while(fdq->lenght > 0){
-            ptr = (int*) pop(fdq);
+            ptr = (int*) lc_queue_pop(fdq);
             if(add_client(bay, *ptr) < 0){
                 lc_error("ERROR - add_client(): can't add new client, realloc() failure\nProbably low memory or corruption");
                 goto exit;
@@ -119,7 +118,7 @@ void* bay_thread(void* arg){
 
         for(i = 0; i < bay->count; i++){
             lastclindex = i;
-            memset(&msg, '\0', sizeof(message));
+            memset(&msg, '\0', sizeof(lc_message_t));
             fd = bay->clientsfd[i];
             n = lc_recv_non_block(fd, &msg, sizeof(msg), 0);
             if(n < 0){
