@@ -6,7 +6,7 @@
 #define DEFAULT_PORT     30200
 #define DEFAULT_VERB     1
 #define DEFAULT_LOGFILE  "./chat_client.log"
-#define DEFAULT_USERNAME "Anonimous"
+#define DEFAULT_USERNAME "Anonymous"
 #define DEFAULT_SHOST    NULL
 #define DEFAULT_SIP      NULL
 #define DEFAULT_SPORT    -1
@@ -30,4 +30,3 @@ config_t conf;
 extern void init_msg(lc_message_t* msg);
 
 #endif // CLIENT_H
-

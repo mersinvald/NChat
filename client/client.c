@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include <libexplain/socket.h>
 #include <libexplain/gethostbyname.h>
@@ -26,7 +27,6 @@
 #include <non_block_io.h>
 
 #define BUFFSIZE 512
-
 
 void usage(char* arg0){
     printf("Usage: %s [server IP or host] [port] [options]\n\n"
@@ -89,9 +89,33 @@ void init_msg(lc_message_t *msg){
     strcpy(msg->username, conf.username);
 }
 
+volatile int client_done = 0;
+
+void client_term_handler(int signum){
+    char sig[16];
+    switch(signum){
+    case SIGINT:  strcpy(sig, "SIGINT");  break;
+    case SIGTERM: strcpy(sig, "SIGTERM"); break;
+    case SIGKILL: strcpy(sig, "SIGKILL"); break;
+    case SIGSEGV: strcpy(sig, "SIGSEGV"); break;
+    default:  sprintf(sig, "SIGNAL %i", signum);
+    }
+    lc_log_v(1, "Client: Got %s, shutting down.", sig);
+    client_done = 1;
+}
+
 int main(int argc, char** argv){
     char exit_code = ERR_NO;
     int n, i;
+
+    /* Making interface react on SIGTERM and SIGKILL */
+    struct sigaction termaction;
+    memset(&termaction, 0, sizeof(struct sigaction));
+    termaction.sa_handler = client_term_handler;
+    sigaction(SIGTERM, &termaction, NULL);
+    sigaction(SIGKILL, &termaction, NULL);
+    sigaction(SIGINT, &termaction, NULL);
+    sigaction(SIGSEGV, &termaction, NULL);
 
     /* Setting up default config */
     conf.port          = DEFAULT_PORT;
@@ -149,7 +173,7 @@ int main(int argc, char** argv){
         if((he = gethostbyname(conf.serv_hostname)) == NULL){
             lc_error("ERROR - gethostbyname: can't resolve server's ip\n%s", explain_gethostbyname(conf.serv_hostname));
             exit_code = ERR_RESOLVE;
-            goto exit;
+            goto kill_interface;
         }
 
         conf.serv_ip = malloc(3*4*sizeof(char));
@@ -165,7 +189,7 @@ int main(int argc, char** argv){
     if(clifd < 0){
         lc_error("ERROR - socket(): can't create client TCP socket\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
         exit_code = ERR_CREATESOCK;
-        goto exit;
+        goto kill_interface;
     }
 
     /* Setting up server struct */
@@ -195,7 +219,7 @@ int main(int argc, char** argv){
 
     /* Main client socket */
     lc_message_t msg;
-    while(1){
+    while(!client_done){
         /* Receiving messages from server */
         memset(&msg, '\0', sizeof(lc_message_t));
         n = lc_recv_non_block(clifd, &msg, sizeof(lc_message_t), 0);
@@ -226,14 +250,16 @@ int main(int argc, char** argv){
         usleep(10000);
     }
 
-
+void* retval = malloc(sizeof(int));
 
 close_client:
     shutdown(clifd, SHUT_RDWR);
     close(clifd);
+kill_interface:
+    pthread_kill(interface_thread, SIGTERM);
+    pthread_join(interface_thread, retval);
 exit:
     lc_log_v(1, "Exititng with code %i", exit_code);
     if(LC_LOG_TO_FILE) fclose(logfile);
     return exit_code;
 }
-

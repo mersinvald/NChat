@@ -119,6 +119,7 @@ void interface_term_handler(int signum){
     case SIGINT:  strcpy(sig, "SIGINT");  break;
     case SIGTERM: strcpy(sig, "SIGTERM"); break;
     case SIGKILL: strcpy(sig, "SIGKILL"); break;
+    case SIGSEGV: strcpy(sig, "SIGSEGV"); break;
     default:  sprintf(sig, "SIGNAL %i", signum);
     }
     lc_log_v(1, "Interface: Got %s, shutting down.", sig);
@@ -138,6 +139,7 @@ void* interface(void* arg){
     sigaction(SIGTERM, &termaction, NULL);
     sigaction(SIGKILL, &termaction, NULL);
     sigaction(SIGINT, &termaction, NULL);
+    sigaction(SIGSEGV, &termaction, NULL);
 
     /* Resize signal handler */
     struct sigaction action;
@@ -258,6 +260,7 @@ kill_input:
 exit_curses:
     window_delete(&input);
     window_delete(&chat);
+    clear();
     endwin();
 
     pthread_exit(exit_code);
