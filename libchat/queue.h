@@ -24,8 +24,6 @@ struct lc_queue_s{
 typedef struct lc_queue_s lc_queue_t;
 typedef struct lc_qnode_s lc_qnode_t;
 
-
-
 extern int         lc_queue_add(lc_queue_t* q, void* var);
 /* queue an element
  * @param
@@ -58,4 +56,3 @@ extern lc_qnode_t* lc_queue_back(lc_queue_t* q);
  */
 
 #endif // QUEUE_H
-

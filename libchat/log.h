@@ -15,4 +15,3 @@ extern void lc_error(const char* message, ...);
 extern void lc_log_to_file(FILE *f);
 extern void lc_set_verbosity(int v);
 #endif // LOG_H
-

@@ -21,5 +21,3 @@ extern int  window_drawborder(window_t* win);
 extern int  window_refresh(window_t* win);
 
 #endif // WINDOW_H
-
-

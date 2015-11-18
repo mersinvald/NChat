@@ -18,7 +18,6 @@ enum {
 };
 
 extern int lc_is_port_valid(int port);
-extern int lc_is_ip_valid(int domain, char* ip);
+extern int lc_is_ip_valid(int domain, const char* ip);
 
 #endif // ERROR_H
-

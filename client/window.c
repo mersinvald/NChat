@@ -56,6 +56,3 @@ int window_refresh(window_t *win) {
     }
     return 0;
 }
-
-
-

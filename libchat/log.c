@@ -11,7 +11,6 @@
 #define CYAN    "\x1b[36m"
 #define RESET   "\x1b[0m"
 
-
 double getUnixTime(){
     struct timespec tv;
 
@@ -81,5 +80,3 @@ void lc_error(const char* message, ...){
     output(stderr, buff, va);
     va_end(va);
 }
-
-
