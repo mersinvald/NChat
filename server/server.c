@@ -17,7 +17,7 @@
 #include <non_block_io.h>
 
 #include "queue.h"
-#include "message_bay.h"
+#include "message_relay.h"
 #include "server.h"
 
 #define DEFAULT_PORT 8000
@@ -68,7 +68,6 @@ void listener_term_handler(int signum){
     lc_log_v(1, "Got %s, shutting down.", sig);
     listener_done = 1;
 }
-
 
 int main(int argc, char** argv){
     int exit_code = ERR_NO;
@@ -136,26 +135,26 @@ int main(int argc, char** argv){
     }
     lc_log_v(2, "Binded listener socket to port %i", conf.port);
 
-    /* Creating message bay */
-    pthread_t bay_thr;
-    pthread_mutex_t bay_mtx = PTHREAD_MUTEX_INITIALIZER;
-    lc_queue_t* bay_q = malloc(sizeof(lc_queue_t));
-    bay_q->ssize = sizeof(int);
-    bay_q->lenght = 0;
-    bay_q->mtx = &bay_mtx;
+    /* Creating message relay */
+    pthread_t relay_thr;
+    pthread_mutex_t relay_mtx = PTHREAD_MUTEX_INITIALIZER;
+    lc_queue_t* relay_q = malloc(sizeof(lc_queue_t));
+    relay_q->ssize = sizeof(int);
+    relay_q->lenght = 0;
+    relay_q->mtx = &relay_mtx;
 
-    if((pthread_create(&bay_thr, NULL, bay_thread, bay_q)) < 0){
-        lc_error("ERROR - pthread_create(): can't create bay thread\nProbably low memory or corruption");
+    if((pthread_create(&relay_thr, NULL, relay_thread, relay_q)) < 0){
+        lc_error("ERROR - pthread_create(): can't create relay thread\nProbably low memory or corruption");
         exit_code = ERR_PTHREAD;
         goto close_listener;
     }
-    lc_log_v(3, "Intitalized message bay thread");
+    lc_log_v(3, "Intitalized message relay thread");
 
     /* Listen for incoming connections */
     if((listen(listener.fd, SOMAXCONN)) < 0){
         lc_error("ERROR - listen(): can't start listening TCP connections\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
         exit_code = ERR_LISTEN;
-        goto kill_bay;
+        goto kill_relay;
     }
     lc_log_v(1, "Listening on port %u", conf.port);
 
@@ -169,7 +168,7 @@ int main(int argc, char** argv){
         if(newclientfd < 0){
             lc_error("ERROR - accept(): can't accept incoming connection\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
             exit_code = ERR_ACCEPT;
-            goto kill_bay;
+            goto kill_relay;
         }
         lc_log_v(2, "Reveived incoming connection from %s:%u", inet_ntoa(newcliaddr.sin_addr), ntohs(newcliaddr.sin_port));
         lc_log_v(4, "Created new socket for client %s:%u", inet_ntoa(newcliaddr.sin_addr), ntohs(newcliaddr.sin_port));
@@ -179,22 +178,22 @@ int main(int argc, char** argv){
         if(fcntl(newclientfd, F_SETFL, flags | O_NONBLOCK) < 0){
             lc_error("ERROR - fnctl() error");
             exit_code = ERR_FCNTL;
-            goto kill_bay;
+            goto kill_relay;
         }
 
-        pthread_mutex_lock(&bay_mtx);
-        if(lc_queue_add(bay_q, &newclientfd) < 0){
+        pthread_mutex_lock(&relay_mtx);
+        if(lc_queue_add(relay_q, &newclientfd) < 0){
             lc_error("ERROR - lc_queue_add(): can't add new fd to queue\nProbably low memory or corruption");
-            goto kill_bay;
+            goto kill_relay;
         }
-        pthread_mutex_unlock(&bay_mtx);
+        pthread_mutex_unlock(&relay_mtx);
 
         usleep(100000);
     }
 
-kill_bay:
-    lc_log_v(3, "Stopping bay thread");
-    pthread_kill(bay_thr, SIGTERM);
+kill_relay:
+    lc_log_v(3, "Stopping relay thread");
+    pthread_kill(relay_thr, SIGTERM);
 close_listener:
     lc_log_v(2, "Closing listener socket");
     shutdown(listener.fd, SHUT_RDWR);
@@ -205,4 +204,3 @@ exit:
     lc_log_v(1, "Exiting with code %i", exit_code);
     return exit_code;
 }
-

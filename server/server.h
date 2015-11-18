@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <sys/un.h>
 
+/* Server configuration */
 struct config_s {
     ushort port;
     ushort verb;
@@ -15,4 +16,3 @@ struct config_s {
 typedef struct config_s config_t;
 
 #endif // SERVER_H
-

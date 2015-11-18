@@ -8,11 +8,11 @@ QMAKE_CFLAGS += -Wall -Wextra
 
 SOURCES += \
     server.c \
-    message_bay.c
+    message_relay.c
 
 HEADERS += \
     server.h \
-    message_bay.h
+    message_relay.h
 
 LIBS += -lexplain -lpthread
 
