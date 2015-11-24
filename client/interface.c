@@ -11,7 +11,8 @@
 
 #include <error.h>
 
-volatile char resized = 0;
+volatile bool resized = 0;
+volatile bool resize_out = 0;
 
 void resize_handler(int dummy){
     resized = 1;
@@ -44,13 +45,15 @@ int resize(int* W, int* H, window_t* chat, window_t* input) {
     ushort input_h = input->h;
 
     window_set(input, NULL, input_h, (*W), (*H)-input_h, 0);
-    window_set(chat, NULL, (*H)-input_h, (*W), 0, 0);
+    window_set(chat, NULL, (*H)-input_h-1, (*W)-1, 1, 1);
 
     n = window_create(input);
     n = window_create(chat);
 
+    scrollok(chat->win, true);
+
     n = window_drawborder(input);
-    window_drawborder(chat);
+    //window_drawborder(chat);
 
     n = window_refresh(input);
     n = window_refresh(chat);
@@ -69,46 +72,73 @@ void* input_handler(void* arg){
     struct input_data* args = (struct input_data*) arg;
     lc_queue_t* q = args->q;
     window_t* win = args->input_win;
-    char buffer[LC_MSG_TEXT_LEN];
+    char buffer[4096];
+    char text[LC_MSG_TEXT_LEN];
+    int len, offset;
 
+    ushort x = 1, y = 1, i = 0;
+    char ch;
     while(1){
-        if(mvwgetstr(win->win, 1, 1, buffer) != -1){
-            pthread_mutex_lock(q->mtx);
-            lc_queue_add(q, &buffer);
-            memset(buffer, '\0', strlen(buffer));
-            pthread_mutex_unlock(q->mtx);
-
-            window_clear(win);
-            window_drawborder(win);
-            window_refresh(win);
+        memset(buffer, '\0', 4096 * sizeof(char));
+        while((ch = mvwgetch(win->win, y, x)) != '\n'){
+            if(ch > 0){
+                buffer[i++] = ch;
+                if(x > win->w-3){
+                    x = 0;
+                    y++;
+                    if(y > win->h-2) break;
+                }
+                x++;
+            }
+            usleep(1000);
         }
+        y = 1; x = 1; i = 0;
+        len = strlen(buffer);
+        offset = 0;
+        do{
+            strncpy(text, buffer+offset, LC_MSG_TEXT_LEN-1);
+            pthread_mutex_lock(q->mtx);
+            lc_queue_add(q, &text);
+            memset(text, '\0', LC_MSG_TEXT_LEN);
+            pthread_mutex_unlock(q->mtx);
+        } while((offset+=LC_MSG_TEXT_LEN-1) < len);
+        window_clear(win);
+        window_drawborder(win);
+        window_refresh(win);
     }
 }
 
 void print_message(window_t* win, lc_message_t* msg){
-    static ushort y = 1;
-    static ushort x = 1;
+    static ushort y = 0, x = 0;
+    int i, j;
 
-
-    if(y > win->h-2){
-        char space[COLS];
-        memset(&space, ' ', COLS);
-        space[COLS-1] = '\0';
-
-        mvwaddstr(win->win, win->h-1, 0, space);
-
-        wscrl(win->win, 1);
-        window_drawborder(win);
-        window_refresh(win);
-        y--;
+    if(resize_out == true) {
+        y = 0;
+        x = 0;
+        resize_out = false;
     }
 
-    int usernames = strcmp(msg->username, conf.username);
+    if(y >= win->h) {
+        y--;
+        scroll(win->win);
+        wrefresh(win->win);
+    }
 
-    wattrset(win->win, A_BOLD | ((usernames == 0) ? A_UNDERLINE : 0));        /* making username bold */
-    mvwprintw(win->win, y, x, "%s", msg->username);                           /* print username */
-    wattrset(win->win, A_NORMAL);                                             /* disabling bold */
-    mvwprintw(win->win, y++, x + strlen(msg->username), ": %s", msg->text);   /* print message text */
+    mvwprintw(win->win, y, 0, "%s: ", msg->username);
+    x += strlen(msg->username) + 2;
+
+    for(i = 0; i < strlen(msg->text); i++){
+        if(x+1 >= win->w) {y++; x=0;}
+        if(y >= win->h) {
+            y--;
+            scroll(win->win);
+            wrefresh(win->win);
+        }
+        mvwaddch(win->win, y, x++, msg->text[i]);
+    }
+
+    x = 0;
+    y++;
 }
 
 volatile int interface_done = 0;
@@ -155,7 +185,7 @@ void* interface(void* arg){
     int H = LINES;
 
     /* input window size (1 for input, 2 for border) */
-    ushort input_h = 3;
+    ushort input_h = 7;
 
     /* setting up windows */
     window_set(&input,    /* window_t* */
@@ -166,17 +196,17 @@ void* interface(void* arg){
                0);        /* x pos */
     window_set(&chat,
                NULL,
-               H-input_h,
-               W,
-               0,
-               0);
+               H-input_h-1,
+               W-1,
+               1,
+               1);
 
     /* wrapper-functions with some error handling */
     int n = 0;
     n = window_create(&input);
     n = window_create(&chat);
     n = window_drawborder(&input);
-    n = window_drawborder(&chat);
+    //n = window_drawborder(&chat);
     n = window_refresh(&input);
     n = window_refresh(&chat);
     if(n < 0){
@@ -211,6 +241,7 @@ void* interface(void* arg){
         /* Handle resize */
         if(resized)
             if(resize(&W, &H, &chat, &input) != 0){
+                resize_out = true;
                 lc_error("ERROR resize handling failed with code %i", window_errno);
                 *exit_code = ERR_CURSES;
                 goto kill_input;
@@ -238,21 +269,23 @@ void* interface(void* arg){
         pthread_mutex_lock(&input_mtx);
         if(input_queue.lenght > 0){
             char* text = (char*) lc_queue_pop(&input_queue);
-            ushort textlen = strlen(text);
+            if(text != NULL) {
+                ushort textlen = strlen(text);
 
-            init_msg(outmsg);
+                init_msg(outmsg);
 
-            strcpy(outmsg->text, text);
-            pthread_mutex_lock(outqueue->mtx);
-            lc_queue_add(outqueue, outmsg);
-            pthread_mutex_unlock(outqueue->mtx);
+                strcpy(outmsg->text, text);
+                pthread_mutex_lock(outqueue->mtx);
+                lc_queue_add(outqueue, outmsg);
+                pthread_mutex_unlock(outqueue->mtx);
 
-            memset(outmsg, '\0', textlen * sizeof(char));
-            free(text);
+                memset(outmsg, '\0', textlen * sizeof(char));
+                free(text);
+            }
         }
         pthread_mutex_unlock(&input_mtx);
 
-        usleep(1000);
+        //usleep(100);
     }
 kill_input:
     /* there is no sighandler in input thread, so cutting out it's fucking head */

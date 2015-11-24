@@ -8,12 +8,14 @@ int lc_queue_add(lc_queue_t* q, void* var){
     if(q->top == NULL){
         q->top       = malloc(sizeof(lc_qnode_t));
         q->top->next = NULL;
+        q->top->var  = NULL;
         q->top->var  = malloc(q->ssize);
         memcpy(q->top->var, var, q->ssize);
     } else {
         lc_qnode_t* b = lc_queue_back(q);        /* находим последнюю ноду */
         b->next = malloc(sizeof(lc_qnode_t));    /* резервируем память под еще одну ноду в конце */
         b->next->next = NULL;                    /* принудительно зануляем указатель */
+        b->var = NULL;
         b->next->var = malloc(q->ssize);         /* резервируем память под новый элеиент в соответствии с указанным заранее ssize */
         memcpy(b->next->var, var, q->ssize);     /* копируем память из переданного указателя в новый */
     }
