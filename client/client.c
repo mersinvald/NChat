@@ -238,7 +238,7 @@ int main(int argc, char** argv){
         pthread_mutex_lock(outqueue.mtx);
         if(outqueue.lenght > 0){
             lc_message_t* out = (lc_message_t*) lc_queue_pop(&outqueue);
-            msg_size = sizeof(out->username) + strlen(out->username) + 1;
+            msg_size = sizeof(out->username) + strlen(out->text) + 1;
             n = lc_send_non_block(clifd, out, msg_size, 0);
             if(n < 0){
                 exit_code = ERR_SEND;
