@@ -14,9 +14,7 @@ HEADERS += \
     server.h \
     message_relay.h
 
-LIBS += -lexplain -lpthread
-
-
+LIBS += -lpthread
 
 unix:!macx: LIBS += -L$$OUT_PWD/../libchat/ -lchat
 
@@ -24,3 +22,6 @@ INCLUDEPATH += $$PWD/../libchat
 DEPENDPATH += $$PWD/../libchat
 
 unix:!macx: PRE_TARGETDEPS += $$OUT_PWD/../libchat/libchat.a
+
+unix: CONFIG += link_pkgconfig
+unix: PKGCONFIG += libexplain

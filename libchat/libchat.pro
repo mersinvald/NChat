@@ -10,8 +10,6 @@ TARGET = chat
 TEMPLATE = lib
 CONFIG += staticlib
 
-LIBS += -lexplain
-
 SOURCES += \
     log.c \
     error.c \
@@ -32,3 +30,6 @@ unix {
     target.path = /usr/lib
     INSTALLS += target
 }
+
+unix: CONFIG += link_pkgconfig
+unix: PKGCONFIG += libexplain

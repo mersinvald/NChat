@@ -28,3 +28,6 @@ INCLUDEPATH += $$PWD/../libchat
 DEPENDPATH += $$PWD/../libchat
 
 unix:!macx: PRE_TARGETDEPS += $$OUT_PWD/../libchat/libchat.a
+
+unix: CONFIG += link_pkgconfig
+unix: PKGCONFIG += libexplain
