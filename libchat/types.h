@@ -5,7 +5,7 @@
 #include <netinet/in.h>
 #include <sys/un.h>
 
-#define LC_MSG_TEXT_LEN 128
+#define LC_MSG_TEXT_LEN 512
 #define LC_MSG_USERNAME_LEN 32
 
 struct lc_socket_in_s {
@@ -25,10 +25,8 @@ struct lc_socket_un_s {
 typedef struct lc_socket_un_s lc_sockun_t;
 
 struct lc_message_s {
-    char   text[LC_MSG_TEXT_LEN];
     char   username[LC_MSG_USERNAME_LEN];
-    int    id;
-    time_t out_time;
+    char   text[LC_MSG_TEXT_LEN];
 };
 
 typedef struct lc_message_s lc_message_t;

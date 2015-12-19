@@ -98,6 +98,7 @@ void* relay_thread(void* arg){
 
     int n, i, fd, *ptr;
     lc_message_t msg;
+    size_t msg_size;
     memset(&msg, '\0', sizeof(lc_message_t));
 
     /* relay loop */
@@ -125,7 +126,8 @@ void* relay_thread(void* arg){
             }
             if(n > 0){
                 lc_log_v(4, "Received message from one of clients --> broadcasting...");
-                broadcast(fds, &msg, sizeof(msg));
+                msg_size = sizeof(msg.username) + strlen(msg.text) + 1;
+                broadcast(fds, &msg, msg_size);
             }
         }
 

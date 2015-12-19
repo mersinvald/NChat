@@ -219,6 +219,7 @@ int main(int argc, char** argv){
 
     /* Main client socket */
     lc_message_t msg;
+    size_t msg_size;
     while(!client_done){
         /* Receiving messages from server */
         memset(&msg, '\0', sizeof(lc_message_t));
@@ -237,7 +238,8 @@ int main(int argc, char** argv){
         pthread_mutex_lock(outqueue.mtx);
         if(outqueue.lenght > 0){
             lc_message_t* out = (lc_message_t*) lc_queue_pop(&outqueue);
-            n = lc_send_non_block(clifd, out, sizeof(lc_message_t), 0);
+            msg_size = sizeof(out->username) + strlen(out->username) + 1;
+            n = lc_send_non_block(clifd, out, msg_size, 0);
             if(n < 0){
                 exit_code = ERR_SEND;
                 goto close_client;

@@ -14,7 +14,7 @@
 volatile bool resized = 0;
 volatile bool resize_out = 0;
 
-void resize_handler(int dummy){
+void resize_handler(){
     resized = 1;
 }
 
@@ -96,7 +96,8 @@ void* input_handler(void* arg){
         len = strlen(buffer);
         offset = 0;
         do{
-            strncpy(text, buffer+offset, LC_MSG_TEXT_LEN-1);
+            memcpy(text, buffer+offset, LC_MSG_TEXT_LEN-1);
+            text[LC_MSG_TEXT_LEN-1] = '\0';
             pthread_mutex_lock(q->mtx);
             lc_queue_add(q, &text);
             memset(text, '\0', LC_MSG_TEXT_LEN);
@@ -110,7 +111,7 @@ void* input_handler(void* arg){
 
 void print_message(window_t* win, lc_message_t* msg){
     static ushort y = 0, x = 0;
-    int i, j;
+    uint i;
 
     if(resize_out == true) {
         y = 0;
@@ -185,7 +186,7 @@ void* interface(void* arg){
     int H = LINES;
 
     /* input window size (1 for input, 2 for border) */
-    ushort input_h = 7;
+    ushort input_h = 4;
 
     /* setting up windows */
     window_set(&input,    /* window_t* */
@@ -274,7 +275,7 @@ void* interface(void* arg){
 
                 init_msg(outmsg);
 
-                strcpy(outmsg->text, text);
+                memcpy(outmsg->text, text, LC_MSG_TEXT_LEN);
                 pthread_mutex_lock(outqueue->mtx);
                 lc_queue_add(outqueue, outmsg);
                 pthread_mutex_unlock(outqueue->mtx);
