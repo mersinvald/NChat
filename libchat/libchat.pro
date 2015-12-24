@@ -14,8 +14,6 @@ SOURCES += \
     log.c \
     error.c \
     non_block_io.c \
-    fd_recv.c \
-    fd_send.c \
     queue.c
 
 HEADERS += \
@@ -23,7 +21,6 @@ HEADERS += \
     log.h \
     error.h \
     non_block_io.h \
-    ancillary.h \
     queue.h
 
 unix {
