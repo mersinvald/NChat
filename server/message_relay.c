@@ -6,7 +6,6 @@
 #include <types.h>
 #include <log.h>
 #include <non_block_io.h>
-#include <ancillary.h>
 
 #include <libexplain/socket.h>
 #include <errno.h>

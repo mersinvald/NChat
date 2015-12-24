@@ -5,7 +5,6 @@
 
 #include <fcntl.h>
 #include <errno.h>
-#include <ancillary.h>
 #include <signal.h>
 
 #include <libexplain/socket.h>
