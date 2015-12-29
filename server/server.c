@@ -120,7 +120,7 @@ int main(int argc, char** argv){
     listener.slen = sizeof(listener.saddr);
 
     if((listener.fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0){
-        lc_error("ERROR - socket(): can't create TCP socket\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+        lc_error("ERROR - socket(): can't create TCP socket\n%s", explain_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) );
         exit_code = ERR_CREATESOCK;
         goto close_files;
     }

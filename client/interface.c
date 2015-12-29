@@ -286,7 +286,7 @@ void* interface(void* arg){
         }
         pthread_mutex_unlock(&input_mtx);
 
-        //usleep(100);
+       usleep(10000);
     }
 kill_input:
     /* there is no sighandler in input thread, so cutting out it's fucking head */
